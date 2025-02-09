@@ -27,9 +27,16 @@ typedef struct component_cell_data
   bool b_is_blocked;
 } cell_data_c;
 
+typedef struct component_lifetime
+{
+  Uint32 duration;
+  void (*on_delete_callback) (ecs_world_t *world, ecs_entity_t ent);
+} lifetime_c;
+
 ECS_COMPONENT_DECLARE (game_s);
 
 ECS_COMPONENT_DECLARE (cell_data_c);
+ECS_COMPONENT_DECLARE (lifetime_c);
 
 static void
 cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
@@ -38,6 +45,17 @@ cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
   for (Sint32 i = 0; i < count; i++)
     {
       cell_data[i].b_is_blocked = false;
+    }
+}
+
+static void
+lifetime (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
+{
+  lifetime_c *lifetime = ptr;
+  for (Sint32 i = 0; i < count; i++)
+    {
+      lifetime->duration = 500u;
+      lifetime->on_delete_callback = NULL;
     }
 }
 
@@ -61,6 +79,46 @@ try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
       movement->delta.x = dir.x;
       movement->delta.y = dir.y;
       ecs_modified (world, ent, movement_c);
+    }
+}
+
+void
+detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
+{
+  ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
+  const game_s *game = ecs_singleton_get (world, game_s);
+
+  const index_c *index_b = ecs_get (world, ent, index_c);
+
+  for (Sint32 j = -3; j < 4; j++)
+    {
+      for (Sint32 i = -3; i < 4; i++)
+        {
+          SDL_Point potential_spawn
+              = (SDL_Point){ .x = index_b->x + i, .y = index_b->y + j };
+          if (potential_spawn.x < 0 || potential_spawn.x >= MAP_WIDTH
+              || potential_spawn.y < 0 || potential_spawn.y >= MAP_HEIGHT)
+            {
+              continue;
+            }
+          if(i != 0 && j != 0)
+            {
+              continue;
+            }
+          ecs_entity_t cell = *arr_entity_get (
+              *mat2d_entity_get (game->cells, potential_spawn.y), potential_spawn.x);
+
+          const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
+          if (cell_data->b_is_blocked == false)
+            {
+              ecs_entity_t new = ecs_new_w_pair (world, EcsIsA, pfb);
+
+              index_c *index = ecs_ensure (world, new, index_c);
+              index->x = index_b->x + i;
+              index->y = index_b->y + j;
+              ecs_modified (world, new, index_c);
+            }
+        }
     }
 }
 
@@ -126,6 +184,7 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
         index_c *index = ecs_get_mut (world, ent, index_c);
         index->x = index_p->x;
         index->y = index_p->y;
+        ecs_modified (world, ent, index_c);
       }
     }
 }
@@ -185,6 +244,28 @@ get_relative_from_index (ecs_entity_t ent, ecs_world_t *ecs)
   const index_c *index = ecs_get (ecs, ent, index_c);
   SDL_FPoint result = { .x = index->x * CELL_SIZE, .y = index->y * CELL_SIZE };
   return result;
+}
+
+static void
+system_lifetime_progress (ecs_iter_t *it)
+{
+  lifetime_c *lifetime = ecs_field (it, lifetime_c, 0);
+
+  for (Sint32 i = 0; i < it->count; i++)
+    {
+      if (lifetime[i].duration > 0)
+        {
+          lifetime[i].duration--;
+        }
+      else
+        {
+          if (lifetime[i].on_delete_callback != NULL)
+            {
+              lifetime[i].on_delete_callback (it->world, it->entities[i]);
+            }
+          ecs_delete (it->world, it->entities[i]);
+        }
+    }
 }
 
 static void
@@ -391,8 +472,33 @@ init_game_prefabs (ecs_world_t *world)
     ecs_entity_t ent
         = ecs_entity (world, { .name = "bomb_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    lifetime_c *lifetime = ecs_ensure (world, ent, lifetime_c);
+    lifetime->on_delete_callback = detonate_bomb;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     string_init_set_str (sprite->name, "T_Sprite_Bomb0.png");
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "explosion_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    anim_player_c *anim_player = ecs_ensure (world, ent, anim_player_c);
+    dict_string_anim_pose_init (anim_player->poses);
+    struct anim_pose *pose = SDL_malloc (sizeof (struct anim_pose));
+    dict_sint32_anim_flipbook_init (pose->directions);
+    struct anim_flipbook *flipbook
+        = SDL_malloc (sizeof (struct anim_flipbook));
+    string_init_set_str (flipbook->name, "T_Flipbook_Explo0.png");
+    flipbook->frame_size = (SDL_FPoint){ 32.f, 32.f };
+    flipbook->frame_count = (SDL_Point){ 4, 1 };
+    flipbook->play_speed = 18u;
+    dict_sint32_anim_flipbook_set_at (pose->directions, 0, flipbook);
+    dict_string_anim_pose_set_at (anim_player->poses, STRING_CTE ("default"),
+                                  pose);
+    string_init_set_str (anim_player->control_pose, "default");
+    anim_player->control_direction = 0;
+    lifetime_c *lifetime = ecs_ensure (world, ent, lifetime_c);
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
   }
 }
 
@@ -410,10 +516,19 @@ init_game_queries (ecs_world_t *world)
 }
 
 static void
+init_game_systems (ecs_world_t *world)
+{
+  ECS_SYSTEM (world, system_lifetime_progress, EcsOnUpdate, lifetime_c);
+}
+
+static void
 init_game_hooks (ecs_world_t *world)
 {
   ecs_type_hooks_t cell_data_hooks = { .ctor = cell_data };
   ecs_set_hooks_id (world, ecs_id (cell_data_c), &cell_data_hooks);
+
+  ecs_type_hooks_t lifetime_hooks = { .ctor = lifetime };
+  ecs_set_hooks_id (world, ecs_id (lifetime_c), &lifetime_hooks);
 }
 
 int
@@ -445,6 +560,7 @@ main (int argc, char *argv[])
   mat2d_entity_init (game->cells);
 
   ECS_COMPONENT_DEFINE (world, cell_data_c);
+  ECS_COMPONENT_DEFINE (world, lifetime_c);
 
   satlas_dir_to_sheets (core->atlas, "dat/gfx", false, STRING_CTE ("sprites"));
 
@@ -468,6 +584,7 @@ main (int argc, char *argv[])
   init_game_hooks (world);
   init_game_prefabs (world);
   init_game_queries (world);
+  init_game_systems (world);
   create_map (world);
   create_bombers (world);
 

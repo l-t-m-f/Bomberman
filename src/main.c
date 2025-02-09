@@ -34,31 +34,63 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
       = *arr_bool_get (input_man->keyboard.key_flips, SDL_SCANCODE_LSHIFT)
         || *arr_bool_get (input_man->keyboard.key_flips, SDL_SCANCODE_RSHIFT);
 
-  ecs_world_t *ecs = param;
+  ecs_world_t *world = param;
   if (key == SDL_SCANCODE_F)
     {
-      core_s *core = ecs_get_mut (ecs, ecs_id (core_s), core_s);
+      core_s *core = ecs_get_mut (world, ecs_id (core_s), core_s);
       core->b_is_fullscreen_presentation = !core->b_is_fullscreen_presentation;
       SDL_SetWindowFullscreen (core->win, core->b_is_fullscreen_presentation);
     }
   if (key == SDL_SCANCODE_G)
     {
-      const game_s *game = ecs_singleton_get (ecs, game_s);
+      const game_s *game = ecs_singleton_get (world, game_s);
       if (b_has_shift_mod == true)
         {
           ecs_iter_t it = ecs_query_iter (
-              ecs, *dict_string_to_query_ptr_get (
-                       game->queries, STRING_CTE ("get_all_rocks")));
+              world, *dict_string_to_query_ptr_get (
+                         game->queries, STRING_CTE ("get_all_rocks")));
           while (ecs_query_next (&it))
             {
               for (Sint32 i = 0; i < it.count; i++)
                 {
-                  box_c *box = ecs_get_mut (ecs, it.entities[i], box_c);
+                  box_c *box = ecs_get_mut (world, it.entities[i], box_c);
                   box->b_is_shown = !box->b_is_shown;
-                  ecs_modified (ecs, it.entities[i], box_c);
+                  ecs_modified (world, it.entities[i], box_c);
+                  cache_c *cache
+                      = ecs_get_mut (world, it.entities[i], cache_c);
+                  cache->b_should_regenerate = true;
+                  ecs_modified (world, it.entities[i], cache_c);
                 }
             }
         }
+    }
+  if (key == SDL_SCANCODE_W)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.y = -1;
+      ecs_modified(world, game->player, movement_c);
+    }
+  if (key == SDL_SCANCODE_A)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.x = -1;
+      ecs_modified(world, game->player, movement_c);
+    }
+  if (key == SDL_SCANCODE_S)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.y = 1;
+      ecs_modified(world, game->player, movement_c);
+    }
+  if (key == SDL_SCANCODE_D)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.x = 1;
+      ecs_modified(world, game->player, movement_c);
     }
 }
 
@@ -69,6 +101,35 @@ handle_key_release (struct input_man *input_man, SDL_Scancode key, void *param)
 void
 handle_key_hold (struct input_man *input_man, SDL_Scancode key, void *param)
 {
+  ecs_world_t *world = param;
+  if (key == SDL_SCANCODE_W)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.y = -1;
+      ecs_modified(world, game->player, movement_c);
+    }
+  if (key == SDL_SCANCODE_A)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.x = -1;
+      ecs_modified(world, game->player, movement_c);
+    }
+  if (key == SDL_SCANCODE_S)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.y = 1;
+      ecs_modified(world, game->player, movement_c);
+    }
+  if (key == SDL_SCANCODE_D)
+    {
+      const game_s *game = ecs_singleton_get (world, game_s);
+      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
+      movement->delta.x = 1;
+      ecs_modified(world, game->player, movement_c);
+    }
 }
 void
 handle_mouse_press (struct input_man *input_man, SDL_FPoint pos, Uint8 button,
@@ -101,7 +162,24 @@ get_relative_from_index (ecs_entity_t ent, ecs_world_t *ecs)
 }
 
 static void
-create_map (ecs_world_t *ecs)
+create_bombers (ecs_world_t *world)
+{
+  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+    ecs_set_name (world, ent, "bomber0");
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 5;
+    index->y = 1;
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+    string_init_set_str (sprite->name, "T_Sprite_Bomber0.png");
+    game->player = ent;
+  }
+}
+
+static void
+create_map (ecs_world_t *world)
 {
   for (Sint32 i = 0; i < MAP_WIDTH; i++)
     {
@@ -109,9 +187,12 @@ create_map (ecs_world_t *ecs)
         {
           {
             {
-              ecs_entity_t pfb = ecs_lookup (ecs, "floor_pfb");
-              ecs_entity_t ent = ecs_new_w_pair (ecs, EcsIsA, pfb);
-              index_c *index = ecs_get_mut (ecs, ent, index_c);
+              ecs_entity_t pfb = ecs_lookup (world, "floor_pfb");
+              ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+              string_t temp;
+              string_init_printf (temp, "floor_%d_%d", i, j);
+              ecs_set_name (world, ent, string_get_cstr (temp));
+              index_c *index = ecs_get_mut (world, ent, index_c);
               index->x = i;
               index->y = j;
             }
@@ -123,9 +204,12 @@ create_map (ecs_world_t *ecs)
                 if (buf < 40u)
                   {
                     {
-                      ecs_entity_t pfb = ecs_lookup (ecs, "rock_pfb");
-                      ecs_entity_t ent = ecs_new_w_pair (ecs, EcsIsA, pfb);
-                      index_c *index = ecs_get_mut (ecs, ent, index_c);
+                      ecs_entity_t pfb = ecs_lookup (world, "rock_pfb");
+                      ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+                      string_t temp;
+                      string_init_printf (temp, "rock_%d_%d", i, j);
+                      ecs_set_name (world, ent, string_get_cstr (temp));
+                      index_c *index = ecs_get_mut (world, ent, index_c);
                       index->x = i;
                       index->y = j;
                     }
@@ -133,9 +217,12 @@ create_map (ecs_world_t *ecs)
                 continue;
               }
             {
-              ecs_entity_t pfb = ecs_lookup (ecs, "wall_pfb");
-              ecs_entity_t ent = ecs_new_w_pair (ecs, EcsIsA, pfb);
-              index_c *index = ecs_get_mut (ecs, ent, index_c);
+              ecs_entity_t pfb = ecs_lookup (world, "wall_pfb");
+              ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+              string_t temp;
+              string_init_printf (temp, "wall_%d_%d", i, j);
+              ecs_set_name (world, ent, string_get_cstr (temp));
+              index_c *index = ecs_get_mut (world, ent, index_c);
               index->x = i;
               index->y = j;
             }
@@ -143,111 +230,117 @@ create_map (ecs_world_t *ecs)
         }
     }
   {
-    ecs_entity_t ent = ecs_entity (ecs, { .name = "static" });
-    bounds_c *bounds = ecs_ensure (ecs, ent, bounds_c);
+    ecs_entity_t ent = ecs_entity (world, { .name = "static" });
+    bounds_c *bounds = ecs_ensure (world, ent, bounds_c);
     bounds->size = (SDL_FPoint){ 480.f, 480.f };
-    box_c *box = ecs_ensure (ecs, ent, box_c);
+    box_c *box = ecs_ensure (world, ent, box_c);
     box->b_is_shown = false;
     box->b_uses_color = true;
-    color_c *color = ecs_ensure (ecs, ent, color_c);
+    color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 0u;
     color->default_g = 0u;
     color->default_b = 0u;
-    layer_c *layer = ecs_ensure (ecs, ent, layer_c);
-    origin_c *origin = ecs_ensure (ecs, ent, origin_c);
-    render_target_c *render_target = ecs_ensure (ecs, ent, render_target_c);
+    layer_c *layer = ecs_ensure (world, ent, layer_c);
+    layer->value = 0;
+    origin_c *origin = ecs_ensure (world, ent, origin_c);
+    render_target_c *render_target = ecs_ensure (world, ent, render_target_c);
     string_init_set_str (render_target->name, "RT_static");
-    visibility_c *visibility = ecs_ensure (ecs, ent, visibility_c);
+    visibility_c *visibility = ecs_ensure (world, ent, visibility_c);
     visibility->b_state = true;
   }
 }
 
 static void
-create_prefabs (ecs_world_t *ecs)
+create_prefabs (ecs_world_t *world)
 {
   {
     ecs_entity_t ent = ecs_entity (
-        ecs, { .name = "grid_element_pfb", .add = ecs_ids (EcsPrefab) });
-    index_c *index = ecs_ensure (ecs, ent, index_c);
-    origin_c *origin = ecs_ensure (ecs, ent, origin_c);
+        world, { .name = "grid_element_pfb", .add = ecs_ids (EcsPrefab) });
+    index_c *index = ecs_ensure (world, ent, index_c);
+    origin_c *origin = ecs_ensure (world, ent, origin_c);
     origin->relative_callback = get_relative_from_index;
   }
   {
-    ecs_entity_t pfb = ecs_lookup (ecs, "grid_element_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "grid_element_pfb");
     ecs_entity_t ent
-        = ecs_entity (ecs, { .name = "grid_object_pfb",
-                             .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    bounds_c *bounds = ecs_ensure (ecs, ent, bounds_c);
+        = ecs_entity (world, { .name = "grid_object_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    bounds_c *bounds = ecs_ensure (world, ent, bounds_c);
     bounds->size = (SDL_FPoint){ CELL_SIZE, CELL_SIZE };
-    box_c *box = ecs_ensure (ecs, ent, box_c);
+    box_c *box = ecs_ensure (world, ent, box_c);
     box->b_is_shown = false;
     box->b_uses_color = true;
-    color_c *color = ecs_ensure (ecs, ent, color_c);
+    color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 0u;
     color->default_g = 155u;
     color->default_b = 0u;
-    layer_c *layer = ecs_ensure (ecs, ent, layer_c);
-    sprite_c *sprite = ecs_ensure (ecs, ent, sprite_c);
-    visibility_c *visibility = ecs_ensure (ecs, ent, visibility_c);
+    layer_c *layer = ecs_ensure (world, ent, layer_c);
+    layer->value = 1;
+    sprite_c *sprite = ecs_ensure (world, ent, sprite_c);
+    visibility_c *visibility = ecs_ensure (world, ent, visibility_c);
     visibility->b_state = true;
   }
   {
-    ecs_entity_t pfb = ecs_lookup (ecs, "grid_object_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
     ecs_entity_t ent
-        = ecs_entity (ecs, { .name = "floor_pfb",
-                             .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    cache_c *cache = ecs_ensure (ecs, ent, cache_c);
+        = ecs_entity (world, { .name = "grid_character_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    //    anim_player_c *anim_player = ecs_ensure (ecs, ent, anim_player_c);
+    layer_c *layer = ecs_get_mut (world, ent, layer_c);
+    layer->value = 2;
+    movement_c *movement = ecs_ensure (world, ent, movement_c);
+    movement->default_cooldown = 10u;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "floor_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    cache_c *cache = ecs_ensure (world, ent, cache_c);
     string_init_set_str (cache->cache_name, "RT_static");
-    color_c *color = ecs_ensure (ecs, ent, color_c);
+    color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 125u;
-    ;
     color->default_g = 0u;
     color->default_b = 125u;
-    layer_c *layer = ecs_get_mut (ecs, ent, layer_c);
-    layer->value = 0;
-    sprite_c *sprite = ecs_get_mut (ecs, ent, sprite_c);
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     sprite->b_uses_color = true;
     string_init_set_str (sprite->name, "T_Sprite_Floor0.png");
   }
   {
-    ecs_entity_t pfb = ecs_lookup (ecs, "grid_object_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
     ecs_entity_t ent
-        = ecs_entity (ecs, { .name = "rock_pfb",
-                             .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    cache_c *cache = ecs_ensure (ecs, ent, cache_c);
+        = ecs_entity (world, { .name = "rock_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    cache_c *cache = ecs_ensure (world, ent, cache_c);
     string_init_set_str (cache->cache_name, "RT_static");
-    layer_c *layer = ecs_get_mut (ecs, ent, layer_c);
-    layer->value = 1;
-    sprite_c *sprite = ecs_get_mut (ecs, ent, sprite_c);
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     string_init_set_str (sprite->name, "T_Sprite_Rock0.png");
   }
   {
-    ecs_entity_t pfb = ecs_lookup (ecs, "grid_object_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
     ecs_entity_t ent
-        = ecs_entity (ecs, { .name = "wall_pfb",
-                             .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    cache_c *cache = ecs_ensure (ecs, ent, cache_c);
+        = ecs_entity (world, { .name = "wall_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    cache_c *cache = ecs_ensure (world, ent, cache_c);
     string_init_set_str (cache->cache_name, "RT_static");
-    color_c *color = ecs_ensure (ecs, ent, color_c);
+    color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 66u;
     color->default_g = 125u;
     color->default_b = 45u;
-    layer_c *layer = ecs_get_mut (ecs, ent, layer_c);
-    layer->value = 1;
-    sprite_c *sprite = ecs_get_mut (ecs, ent, sprite_c);
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     sprite->b_uses_color = true;
     string_init_set_str (sprite->name, "T_Sprite_Wall0.png");
   }
 }
 
 static void
-create_queries (ecs_world_t *ecs)
+create_queries (ecs_world_t *world)
 {
-  game_s *game = ecs_singleton_ensure (ecs, game_s);
+  game_s *game = ecs_singleton_ensure (world, game_s);
   dict_string_to_query_ptr_init (game->queries);
   {
     ecs_query_t *q = ecs_query (
-        ecs, { .terms = { { ecs_isa (ecs_lookup (ecs, "rock_pfb")) } } });
+        world, { .terms = { { ecs_isa (ecs_lookup (world, "rock_pfb")) } } });
     dict_string_to_query_ptr_set_at (game->queries,
                                      STRING_CTE ("get_all_rocks"), q);
   }
@@ -299,8 +392,9 @@ main (int argc, char *argv[])
     visibility->b_state = true;
   }
   create_prefabs (ecs);
-  create_map (ecs);
   create_queries (ecs);
+  create_map (ecs);
+  create_bombers (ecs);
 
   SDL_Event e;
   while (1)

@@ -14,9 +14,6 @@
 
 Sint32 DEBUG_LOG = DEBUG_LOG_NONE;
 
-DICT_DEF2 (dict_string_to_query_ptr, string_t, M_STRING_OPLIST, ecs_query_t *,
-           M_PTR_OPLIST)
-
 typedef struct singleton_game
 {
   ecs_entity_t player;
@@ -25,7 +22,47 @@ typedef struct singleton_game
   dict_string_to_query_ptr_t queries;
 } game_s;
 
+typedef struct component_cell_data
+{
+  bool b_is_blocked;
+} cell_data_c;
+
 ECS_COMPONENT_DECLARE (game_s);
+
+ECS_COMPONENT_DECLARE (cell_data_c);
+
+static void
+cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
+{
+  cell_data_c *cell_data = ptr;
+  for (Sint32 i = 0; i < count; i++)
+    {
+      cell_data[i].b_is_blocked = false;
+    }
+}
+
+static bool
+can_character_move (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
+{
+  const game_s *game = ecs_singleton_get (world, game_s);
+  const index_c *index = ecs_get (world, ent, index_c);
+  ecs_entity_t cell = *arr_entity_get (
+      *mat2d_entity_get (game->cells, index->y + dir.y), index->x + dir.x);
+  const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
+  return !cell_data->b_is_blocked;
+}
+
+static void
+try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
+{
+  if (can_character_move (world, ent, dir) == true)
+    {
+      movement_c *movement = ecs_get_mut (world, ent, movement_c);
+      movement->delta.x = dir.x;
+      movement->delta.y = dir.y;
+      ecs_modified (world, ent, movement_c);
+    }
+}
 
 void
 handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
@@ -35,6 +72,7 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
         || *arr_bool_get (input_man->keyboard.key_flips, SDL_SCANCODE_RSHIFT);
 
   ecs_world_t *world = param;
+  const game_s *game = ecs_singleton_get (world, game_s);
   if (key == SDL_SCANCODE_F)
     {
       core_s *core = ecs_get_mut (world, ecs_id (core_s), core_s);
@@ -43,7 +81,6 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
     }
   if (key == SDL_SCANCODE_G)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
       if (b_has_shift_mod == true)
         {
           ecs_iter_t it = ecs_query_iter (
@@ -66,31 +103,30 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
     }
   if (key == SDL_SCANCODE_W)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.y = -1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ 0, -1 });
     }
   if (key == SDL_SCANCODE_A)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.x = -1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ -1, 0 });
     }
   if (key == SDL_SCANCODE_S)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.y = 1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ 0, 1 });
     }
   if (key == SDL_SCANCODE_D)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.x = 1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ 1, 0 });
+    }
+  if (key == SDL_SCANCODE_SPACE)
+    {
+      {
+        ecs_entity_t pfb = ecs_lookup (world, "bomb_pfb");
+        ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+        const index_c *index_p = ecs_get (world, game->player, index_c);
+        index_c *index = ecs_get_mut (world, ent, index_c);
+        index->x = index_p->x;
+        index->y = index_p->y;
+      }
     }
 }
 
@@ -98,37 +134,27 @@ void
 handle_key_release (struct input_man *input_man, SDL_Scancode key, void *param)
 {
 }
+
 void
 handle_key_hold (struct input_man *input_man, SDL_Scancode key, void *param)
 {
   ecs_world_t *world = param;
+  const game_s *game = ecs_singleton_get (world, game_s);
   if (key == SDL_SCANCODE_W)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.y = -1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ 0, -1 });
     }
   if (key == SDL_SCANCODE_A)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.x = -1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ -1, 0 });
     }
   if (key == SDL_SCANCODE_S)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.y = 1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ 0, 1 });
     }
   if (key == SDL_SCANCODE_D)
     {
-      const game_s *game = ecs_singleton_get (world, game_s);
-      movement_c *movement = ecs_get_mut (world, game->player, movement_c);
-      movement->delta.x = 1;
-      ecs_modified(world, game->player, movement_c);
+      try_move_character (world, game->player, (SDL_Point){ 1, 0 });
     }
 }
 void
@@ -181,53 +207,75 @@ create_bombers (ecs_world_t *world)
 static void
 create_map (ecs_world_t *world)
 {
-  for (Sint32 i = 0; i < MAP_WIDTH; i++)
+  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+  for (Sint32 j = 0; j < MAP_HEIGHT; j++)
     {
-      for (Sint32 j = 0; j < MAP_HEIGHT; j++)
-        {
-          {
-            {
-              ecs_entity_t pfb = ecs_lookup (world, "floor_pfb");
-              ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-              string_t temp;
-              string_init_printf (temp, "floor_%d_%d", i, j);
-              ecs_set_name (world, ent, string_get_cstr (temp));
-              index_c *index = ecs_get_mut (world, ent, index_c);
-              index->x = i;
-              index->y = j;
-            }
+      arr_entity_t row;
+      arr_entity_init (row);
 
-            if (i != 0 && j != 0 && i != MAP_WIDTH - 1 && j != MAP_HEIGHT - 1)
-              {
-                Uint8 buf;
-                randombytes (&buf, sizeof (Uint8));
-                if (buf < 40u)
-                  {
-                    {
-                      ecs_entity_t pfb = ecs_lookup (world, "rock_pfb");
-                      ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-                      string_t temp;
-                      string_init_printf (temp, "rock_%d_%d", i, j);
-                      ecs_set_name (world, ent, string_get_cstr (temp));
-                      index_c *index = ecs_get_mut (world, ent, index_c);
-                      index->x = i;
-                      index->y = j;
-                    }
-                  }
-                continue;
-              }
+      for (Sint32 i = 0; i < MAP_WIDTH; i++)
+        {
+          ecs_entity_t cell = 0u;
+          {
+            ecs_entity_t pfb = ecs_lookup (world, "grid_cell_pfb");
+            cell = ecs_new_w_pair (world, EcsIsA, pfb);
+            string_t temp;
+            string_init_printf (temp, "cell_%d_%d", i, j);
+            ecs_set_name (world, cell, string_get_cstr (temp));
+            index_c *index = ecs_get_mut (world, cell, index_c);
+            index->x = i;
+            index->y = j;
+            arr_entity_push_back (row, cell);
+          }
+          {
+            ecs_entity_t pfb = ecs_lookup (world, "floor_pfb");
+            ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+            string_t temp;
+            string_init_printf (temp, "floor_%d_%d", i, j);
+            ecs_set_name (world, ent, string_get_cstr (temp));
+            index_c *index = ecs_get_mut (world, ent, index_c);
+            index->x = i;
+            index->y = j;
+          }
+
+          array_c *array = ecs_get_mut (world, cell, array_c);
+          cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
+
+          if (i != 0 && j != 0 && i != MAP_WIDTH - 1 && j != MAP_HEIGHT - 1)
             {
-              ecs_entity_t pfb = ecs_lookup (world, "wall_pfb");
-              ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-              string_t temp;
-              string_init_printf (temp, "wall_%d_%d", i, j);
-              ecs_set_name (world, ent, string_get_cstr (temp));
-              index_c *index = ecs_get_mut (world, ent, index_c);
-              index->x = i;
-              index->y = j;
+              Uint8 buf;
+              randombytes (&buf, sizeof (Uint8));
+              if (buf < 40u)
+                {
+                  {
+                    ecs_entity_t pfb = ecs_lookup (world, "rock_pfb");
+                    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+                    string_t temp;
+                    string_init_printf (temp, "rock_%d_%d", i, j);
+                    ecs_set_name (world, ent, string_get_cstr (temp));
+                    index_c *index = ecs_get_mut (world, ent, index_c);
+                    index->x = i;
+                    index->y = j;
+                    cell_data->b_is_blocked = true;
+                    arr_entity_push_back (array->content, ent);
+                  }
+                }
+              continue;
             }
+          {
+            ecs_entity_t pfb = ecs_lookup (world, "wall_pfb");
+            ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+            string_t temp;
+            string_init_printf (temp, "wall_%d_%d", i, j);
+            ecs_set_name (world, ent, string_get_cstr (temp));
+            index_c *index = ecs_get_mut (world, ent, index_c);
+            index->x = i;
+            index->y = j;
+            cell_data->b_is_blocked = true;
+            arr_entity_push_back (array->content, ent);
           }
         }
+      mat2d_entity_push_back (game->cells, row);
     }
   {
     ecs_entity_t ent = ecs_entity (world, { .name = "static" });
@@ -251,8 +299,15 @@ create_map (ecs_world_t *world)
 }
 
 static void
-create_prefabs (ecs_world_t *world)
+init_game_prefabs (ecs_world_t *world)
 {
+  {
+    ecs_entity_t ent = ecs_entity (
+        world, { .name = "grid_cell_pfb", .add = ecs_ids (EcsPrefab) });
+    array_c *array = ecs_ensure (world, ent, array_c);
+    cell_data_c *cell_data = ecs_ensure (world, ent, cell_data_c);
+    index_c *index = ecs_ensure (world, ent, index_c);
+  }
   {
     ecs_entity_t ent = ecs_entity (
         world, { .name = "grid_element_pfb", .add = ecs_ids (EcsPrefab) });
@@ -331,10 +386,18 @@ create_prefabs (ecs_world_t *world)
     sprite->b_uses_color = true;
     string_init_set_str (sprite->name, "T_Sprite_Wall0.png");
   }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "bomb_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+    string_init_set_str (sprite->name, "T_Sprite_Bomb0.png");
+  }
 }
 
 static void
-create_queries (ecs_world_t *world)
+init_game_queries (ecs_world_t *world)
 {
   game_s *game = ecs_singleton_ensure (world, game_s);
   dict_string_to_query_ptr_init (game->queries);
@@ -346,10 +409,17 @@ create_queries (ecs_world_t *world)
   }
 }
 
+static void
+init_game_hooks (ecs_world_t *world)
+{
+  ecs_type_hooks_t cell_data_hooks = { .ctor = cell_data };
+  ecs_set_hooks_id (world, ecs_id (cell_data_c), &cell_data_hooks);
+}
+
 int
 main (int argc, char *argv[])
 {
-  ecs_world_t *ecs = ecs_init ();
+  ecs_world_t *world = ecs_init ();
 
   SDL_Point default_size = { .x = 480, .y = 480 };
 
@@ -368,9 +438,13 @@ main (int argc, char *argv[])
           .input_data = { .b_is_resizing_widget = false,
                           .b_is_dragging_widget = false,
                           .b_is_moving_camera = false } };
-  core_s *core = init_pluto (ecs, &params);
+  core_s *core = init_pluto (world, &params);
 
-  ECS_COMPONENT_DEFINE (ecs, game_s);
+  ECS_COMPONENT_DEFINE (world, game_s);
+  game_s *game = ecs_singleton_ensure (world, game_s);
+  mat2d_entity_init (game->cells);
+
+  ECS_COMPONENT_DEFINE (world, cell_data_c);
 
   satlas_dir_to_sheets (core->atlas, "dat/gfx", false, STRING_CTE ("sprites"));
 
@@ -379,22 +453,23 @@ main (int argc, char *argv[])
   render_target_clear (core->rts, STRING_CTE ("RT_static"), 0, 0, 0, 255);
 
   {
-    ecs_entity_t ent = ecs_entity (ecs, { .name = "stage" });
-    bounds_c *bounds = ecs_ensure (ecs, ent, bounds_c);
+    ecs_entity_t ent = ecs_entity (world, { .name = "stage" });
+    bounds_c *bounds = ecs_ensure (world, ent, bounds_c);
     bounds->size = (SDL_FPoint){ .x = (float)default_size.x - 1.f,
                                  .y = (float)default_size.y - 1.f };
-    box_c *box = ecs_ensure (ecs, ent, box_c);
+    box_c *box = ecs_ensure (world, ent, box_c);
     box->b_is_filled = true;
-    layer_c *layer = ecs_ensure (ecs, ent, layer_c);
-    origin_c *origin = ecs_ensure (ecs, ent, origin_c);
+    layer_c *layer = ecs_ensure (world, ent, layer_c);
+    origin_c *origin = ecs_ensure (world, ent, origin_c);
     origin->relative = (SDL_FPoint){ 1.f, 1.f };
-    visibility_c *visibility = ecs_ensure (ecs, ent, visibility_c);
+    visibility_c *visibility = ecs_ensure (world, ent, visibility_c);
     visibility->b_state = true;
   }
-  create_prefabs (ecs);
-  create_queries (ecs);
-  create_map (ecs);
-  create_bombers (ecs);
+  init_game_hooks (world);
+  init_game_prefabs (world);
+  init_game_queries (world);
+  create_map (world);
+  create_bombers (world);
 
   SDL_Event e;
   while (1)
@@ -409,32 +484,33 @@ main (int argc, char *argv[])
           if (e.type == SDL_EVENT_KEY_DOWN)
             {
               input_man_register_scancode (core->input_man, e.key.scancode,
-                                           ecs);
+                                           world);
             }
           if (e.type == SDL_EVENT_KEY_UP)
             {
               input_man_unregister_scancode (core->input_man, e.key.scancode,
-                                             ecs);
+                                             world);
             }
           if (e.type == SDL_EVENT_MOUSE_MOTION)
             {
               input_man_try_handle_mouse_motion (core->input_man, e.motion,
-                                                 ecs);
+                                                 world);
             }
           if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
             {
-              input_man_try_handle_mouse_down (core->input_man, e.button, ecs);
+              input_man_try_handle_mouse_down (core->input_man, e.button,
+                                               world);
             }
 
           if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
             {
-              input_man_try_handle_mouse_up (core->input_man, e.button, ecs);
+              input_man_try_handle_mouse_up (core->input_man, e.button, world);
             }
         }
-      input_man_bounce_keys (core->input_man, ecs);
+      input_man_bounce_keys (core->input_man, world);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 0, 255);
       SDL_RenderClear (core->rend);
-      ecs_progress (ecs, 0.f);
+      ecs_progress (world, 0.f);
       SDL_RenderPresent (core->rend);
     }
 

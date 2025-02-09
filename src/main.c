@@ -90,9 +90,9 @@ detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
 
   const index_c *index_b = ecs_get (world, ent, index_c);
 
-  for (Sint32 j = -3; j < 4; j++)
+  for (Sint32 j = -2; j < 3; j++)
     {
-      for (Sint32 i = -3; i < 4; i++)
+      for (Sint32 i = -2; i < 3; i++)
         {
           SDL_Point potential_spawn
               = (SDL_Point){ .x = index_b->x + i, .y = index_b->y + j };
@@ -101,12 +101,13 @@ detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
             {
               continue;
             }
-          if(i != 0 && j != 0)
+          if (i != 0 && j != 0)
             {
               continue;
             }
           ecs_entity_t cell = *arr_entity_get (
-              *mat2d_entity_get (game->cells, potential_spawn.y), potential_spawn.x);
+              *mat2d_entity_get (game->cells, potential_spawn.y),
+              potential_spawn.x);
 
           const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
           if (cell_data->b_is_blocked == false)
@@ -498,6 +499,7 @@ init_game_prefabs (ecs_world_t *world)
     string_init_set_str (anim_player->control_pose, "default");
     anim_player->control_direction = 0;
     lifetime_c *lifetime = ecs_ensure (world, ent, lifetime_c);
+    lifetime->duration = 150u;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
   }
 }

@@ -1,10 +1,12 @@
 #include "SDL3/SDL.h"
+#include "randombytes.h"
 
 #include "pluto.h"
 
 #include "input_man.h"
 #include "log.h"
 #include "m-dict.h"
+#include "render_target.h"
 
 #define CELL_SIZE 32
 #define MAP_WIDTH 15
@@ -106,14 +108,58 @@ create_map (ecs_world_t *ecs)
       for (Sint32 j = 0; j < MAP_HEIGHT; j++)
         {
           {
-            ecs_entity_t pfb = ecs_lookup (ecs, "rock_pfb");
-            ecs_entity_t ent = ecs_new_w_pair (ecs, EcsIsA, pfb);
-            index_c *index = ecs_get_mut (ecs, ent, index_c);
-            index->x = i;
-            index->y = j;
+            {
+              ecs_entity_t pfb = ecs_lookup (ecs, "floor_pfb");
+              ecs_entity_t ent = ecs_new_w_pair (ecs, EcsIsA, pfb);
+              index_c *index = ecs_get_mut (ecs, ent, index_c);
+              index->x = i;
+              index->y = j;
+            }
+
+            if (i != 0 && j != 0 && i != MAP_WIDTH - 1 && j != MAP_HEIGHT - 1)
+              {
+                Uint8 buf;
+                randombytes (&buf, sizeof (Uint8));
+                if (buf < 40u)
+                  {
+                    {
+                      ecs_entity_t pfb = ecs_lookup (ecs, "rock_pfb");
+                      ecs_entity_t ent = ecs_new_w_pair (ecs, EcsIsA, pfb);
+                      index_c *index = ecs_get_mut (ecs, ent, index_c);
+                      index->x = i;
+                      index->y = j;
+                    }
+                  }
+                continue;
+              }
+            {
+              ecs_entity_t pfb = ecs_lookup (ecs, "wall_pfb");
+              ecs_entity_t ent = ecs_new_w_pair (ecs, EcsIsA, pfb);
+              index_c *index = ecs_get_mut (ecs, ent, index_c);
+              index->x = i;
+              index->y = j;
+            }
           }
         }
     }
+  {
+    ecs_entity_t ent = ecs_entity (ecs, { .name = "static" });
+    bounds_c *bounds = ecs_ensure (ecs, ent, bounds_c);
+    bounds->size = (SDL_FPoint){ 480.f, 480.f };
+    box_c *box = ecs_ensure (ecs, ent, box_c);
+    box->b_is_shown = false;
+    box->b_uses_color = true;
+    color_c *color = ecs_ensure (ecs, ent, color_c);
+    color->default_r = 0u;
+    color->default_g = 0u;
+    color->default_b = 0u;
+    layer_c *layer = ecs_ensure (ecs, ent, layer_c);
+    origin_c *origin = ecs_ensure (ecs, ent, origin_c);
+    render_target_c *render_target = ecs_ensure (ecs, ent, render_target_c);
+    string_init_set_str (render_target->name, "RT_static");
+    visibility_c *visibility = ecs_ensure (ecs, ent, visibility_c);
+    visibility->b_state = true;
+  }
 }
 
 static void
@@ -148,10 +194,49 @@ create_prefabs (ecs_world_t *ecs)
   {
     ecs_entity_t pfb = ecs_lookup (ecs, "grid_object_pfb");
     ecs_entity_t ent
+        = ecs_entity (ecs, { .name = "floor_pfb",
+                             .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    cache_c *cache = ecs_ensure (ecs, ent, cache_c);
+    string_init_set_str (cache->cache_name, "RT_static");
+    color_c *color = ecs_ensure (ecs, ent, color_c);
+    color->default_r = 125u;
+    ;
+    color->default_g = 0u;
+    color->default_b = 125u;
+    layer_c *layer = ecs_get_mut (ecs, ent, layer_c);
+    layer->value = 0;
+    sprite_c *sprite = ecs_get_mut (ecs, ent, sprite_c);
+    sprite->b_uses_color = true;
+    string_init_set_str (sprite->name, "T_Sprite_Floor0.png");
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (ecs, "grid_object_pfb");
+    ecs_entity_t ent
         = ecs_entity (ecs, { .name = "rock_pfb",
                              .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    cache_c *cache = ecs_ensure (ecs, ent, cache_c);
+    string_init_set_str (cache->cache_name, "RT_static");
+    layer_c *layer = ecs_get_mut (ecs, ent, layer_c);
+    layer->value = 1;
     sprite_c *sprite = ecs_get_mut (ecs, ent, sprite_c);
-    string_init_set_str (sprite->name, "T_Obj_Rock0.png");
+    string_init_set_str (sprite->name, "T_Sprite_Rock0.png");
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (ecs, "grid_object_pfb");
+    ecs_entity_t ent
+        = ecs_entity (ecs, { .name = "wall_pfb",
+                             .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    cache_c *cache = ecs_ensure (ecs, ent, cache_c);
+    string_init_set_str (cache->cache_name, "RT_static");
+    color_c *color = ecs_ensure (ecs, ent, color_c);
+    color->default_r = 66u;
+    color->default_g = 125u;
+    color->default_b = 45u;
+    layer_c *layer = ecs_get_mut (ecs, ent, layer_c);
+    layer->value = 1;
+    sprite_c *sprite = ecs_get_mut (ecs, ent, sprite_c);
+    sprite->b_uses_color = true;
+    string_init_set_str (sprite->name, "T_Sprite_Wall0.png");
   }
 }
 
@@ -195,6 +280,10 @@ main (int argc, char *argv[])
   ECS_COMPONENT_DEFINE (ecs, game_s);
 
   satlas_dir_to_sheets (core->atlas, "dat/gfx", false, STRING_CTE ("sprites"));
+
+  render_target_add_to_pool (core->rts, STRING_CTE ("RT_static"),
+                             (SDL_Point){ default_size.x, default_size.y });
+  render_target_clear (core->rts, STRING_CTE ("RT_static"), 0, 0, 0, 255);
 
   {
     ecs_entity_t ent = ecs_entity (ecs, { .name = "stage" });

@@ -113,10 +113,9 @@ detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
           if (cell_data->b_is_blocked == false)
             {
               ecs_entity_t new = ecs_new_w_pair (world, EcsIsA, pfb);
-
               index_c *index = ecs_ensure (world, new, index_c);
-              index->x = index_b->x + i;
-              index->y = index_b->y + j;
+              index->x = potential_spawn.x;
+              index->y = potential_spawn.y;
               ecs_modified (world, new, index_c);
             }
         }
@@ -216,6 +215,18 @@ handle_key_hold (struct input_man *input_man, SDL_Scancode key, void *param)
     {
       try_move_character (world, game->player, (SDL_Point){ 1, 0 });
     }
+  if (key == SDL_SCANCODE_SPACE)
+    {
+      {
+        ecs_entity_t pfb = ecs_lookup (world, "bomb_pfb");
+        ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+        const index_c *index_p = ecs_get (world, game->player, index_c);
+        index_c *index = ecs_get_mut (world, ent, index_c);
+        index->x = index_p->x;
+        index->y = index_p->y;
+        ecs_modified (world, ent, index_c);
+      }
+    }
 }
 void
 handle_mouse_press (struct input_man *input_man, SDL_FPoint pos, Uint8 button,
@@ -281,7 +292,7 @@ create_bombers (ecs_world_t *world)
     index->x = 5;
     index->y = 1;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
-    string_init_set_str (sprite->name, "T_Sprite_Bomber0.png");
+    string_set_str (sprite->name, "T_Sprite_Bomber0.png");
     game->player = ent;
   }
 }
@@ -374,7 +385,7 @@ create_map (ecs_world_t *world)
     layer->value = 0;
     origin_c *origin = ecs_ensure (world, ent, origin_c);
     render_target_c *render_target = ecs_ensure (world, ent, render_target_c);
-    string_init_set_str (render_target->name, "RT_static");
+    string_set_str (render_target->name, "RT_static");
     visibility_c *visibility = ecs_ensure (world, ent, visibility_c);
     visibility->b_state = true;
   }
@@ -434,14 +445,14 @@ init_game_prefabs (ecs_world_t *world)
         = ecs_entity (world, { .name = "floor_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
     cache_c *cache = ecs_ensure (world, ent, cache_c);
-    string_init_set_str (cache->cache_name, "RT_static");
+    string_set_str (cache->cache_name, "RT_static");
     color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 125u;
     color->default_g = 0u;
     color->default_b = 125u;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     sprite->b_uses_color = true;
-    string_init_set_str (sprite->name, "T_Sprite_Floor0.png");
+    string_set_str (sprite->name, "T_Sprite_Floor0.png");
   }
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
@@ -449,9 +460,9 @@ init_game_prefabs (ecs_world_t *world)
         = ecs_entity (world, { .name = "rock_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
     cache_c *cache = ecs_ensure (world, ent, cache_c);
-    string_init_set_str (cache->cache_name, "RT_static");
+    string_set_str (cache->cache_name, "RT_static");
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
-    string_init_set_str (sprite->name, "T_Sprite_Rock0.png");
+    string_set_str (sprite->name, "T_Sprite_Rock0.png");
   }
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
@@ -459,14 +470,14 @@ init_game_prefabs (ecs_world_t *world)
         = ecs_entity (world, { .name = "wall_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
     cache_c *cache = ecs_ensure (world, ent, cache_c);
-    string_init_set_str (cache->cache_name, "RT_static");
+    string_set_str (cache->cache_name, "RT_static");
     color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 66u;
     color->default_g = 125u;
     color->default_b = 45u;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     sprite->b_uses_color = true;
-    string_init_set_str (sprite->name, "T_Sprite_Wall0.png");
+    string_set_str (sprite->name, "T_Sprite_Wall0.png");
   }
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
@@ -476,7 +487,7 @@ init_game_prefabs (ecs_world_t *world)
     lifetime_c *lifetime = ecs_ensure (world, ent, lifetime_c);
     lifetime->on_delete_callback = detonate_bomb;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
-    string_init_set_str (sprite->name, "T_Sprite_Bomb0.png");
+    string_set_str (sprite->name, "T_Sprite_Bomb0.png");
   }
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");

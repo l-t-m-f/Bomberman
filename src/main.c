@@ -20,6 +20,7 @@ typedef struct singleton_game
   mat2d_entity_t cells;
   ecs_entity_t current_scene;
   dict_string_to_query_ptr_t queries;
+  SDL_Point control_delta;
 } game_s;
 
 typedef struct component_cell_data
@@ -76,8 +77,10 @@ try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
   if (can_character_move (world, ent, dir) == true)
     {
       movement_c *movement = ecs_get_mut (world, ent, movement_c);
+
       movement->delta.x = dir.x;
       movement->delta.y = dir.y;
+
       ecs_modified (world, ent, movement_c);
     }
 }
@@ -130,7 +133,7 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
         || *arr_bool_get (input_man->keyboard.key_flips, SDL_SCANCODE_RSHIFT);
 
   ecs_world_t *world = param;
-  const game_s *game = ecs_singleton_get (world, game_s);
+  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
   if (key == SDL_SCANCODE_F)
     {
       core_s *core = ecs_get_mut (world, ecs_id (core_s), core_s);
@@ -161,19 +164,19 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
     }
   if (key == SDL_SCANCODE_W)
     {
-      try_move_character (world, game->player, (SDL_Point){ 0, -1 });
+      game->control_delta.y = -1;
     }
   if (key == SDL_SCANCODE_A)
     {
-      try_move_character (world, game->player, (SDL_Point){ -1, 0 });
+      game->control_delta.x = -1;
     }
   if (key == SDL_SCANCODE_S)
     {
-      try_move_character (world, game->player, (SDL_Point){ 0, 1 });
+      game->control_delta.y = 1;
     }
   if (key == SDL_SCANCODE_D)
     {
-      try_move_character (world, game->player, (SDL_Point){ 1, 0 });
+      game->control_delta.x = 1;
     }
   if (key == SDL_SCANCODE_SPACE)
     {
@@ -198,22 +201,22 @@ void
 handle_key_hold (struct input_man *input_man, SDL_Scancode key, void *param)
 {
   ecs_world_t *world = param;
-  const game_s *game = ecs_singleton_get (world, game_s);
+  game_s *game = ecs_get_mut (world, ecs_id(game_s), game_s);
   if (key == SDL_SCANCODE_W)
     {
-      try_move_character (world, game->player, (SDL_Point){ 0, -1 });
+      game->control_delta.y = -1;
     }
   if (key == SDL_SCANCODE_A)
     {
-      try_move_character (world, game->player, (SDL_Point){ -1, 0 });
+      game->control_delta.x = -1;
     }
   if (key == SDL_SCANCODE_S)
     {
-      try_move_character (world, game->player, (SDL_Point){ 0, 1 });
+      game->control_delta.y = 1;
     }
   if (key == SDL_SCANCODE_D)
     {
-      try_move_character (world, game->player, (SDL_Point){ 1, 0 });
+      game->control_delta.x = 1;
     }
   if (key == SDL_SCANCODE_SPACE)
     {
@@ -604,6 +607,8 @@ main (int argc, char *argv[])
   SDL_Event e;
   while (1)
     {
+      game->control_delta.x = 0;
+      game->control_delta.y = 0;
       while (SDL_PollEvent (&e) > 0)
         {
           if (e.type == SDL_EVENT_QUIT)
@@ -638,6 +643,7 @@ main (int argc, char *argv[])
             }
         }
       input_man_bounce_keys (core->input_man, world);
+      try_move_character (world, game->player, game->control_delta);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 0, 255);
       SDL_RenderClear (core->rend);
       ecs_progress (world, 0.f);

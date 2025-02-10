@@ -24,7 +24,7 @@ set(SDL3_INCLUDE
 
 set(GAME_MODULES_INCLUDE ${CMAKE_SOURCE_DIR}/deps/game_modules)
 
-set(PLUTO_INCLUDE ${CMAKE_SOURCE_DIR}/deps/Pluto/src)
+set(PLUTO_INCLUDE ${CMAKE_SOURCE_DIR}/deps/pluto/src)
 
 set(BINN_INCLUDE ${CMAKE_SOURCE_DIR}/deps/binn/src)
 set(FLECS_INCLUDE ${CMAKE_SOURCE_DIR}/deps/flecs/include)
@@ -73,21 +73,21 @@ endif ()
 
 if (EXISTS ${PLUTO_INCLUDE})
     message("-- Building Pluto Framework statically.")
-    add_library(Pluto STATIC
-            deps/Pluto/src/pluto.c)
-    target_compile_options(Pluto PRIVATE -std=c99)
-    target_include_directories(Pluto PRIVATE ${SDL3_INCLUDE} ${FLECS_INCLUDE} ${MLIB_INCLUDE} ${GAME_MODULES_INCLUDE})
-    target_link_libraries(Pluto PRIVATE
+    add_library(pluto STATIC
+            deps/pluto/src/pluto.c)
+    target_compile_options(pluto PRIVATE -std=c99)
+    target_include_directories(pluto PRIVATE ${SDL3_INCLUDE} ${FLECS_INCLUDE} ${MLIB_INCLUDE} ${GAME_MODULES_INCLUDE})
+    target_link_libraries(pluto PRIVATE
             SDL3::SDL3
             SDL3_image::SDL3_image
             SDL3_ttf::SDL3_ttf
             flecs::flecs_static
             game_modules)
-    set_target_properties(Pluto PROPERTIES
-            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/deps/Pluto
+    set_target_properties(pluto PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/deps/pluto
     )
 else ()
-    message(FATAL_ERROR "-- Couldn't find 'Pluto' for static build!")
+    message(FATAL_ERROR "-- Couldn't find Pluto Framework for static build!")
 endif ()
 
 # Build smaller libs who don't provide a CMakeList directly.
@@ -148,7 +148,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         flecs::flecs_static
         randombytes
         game_modules
-        Pluto
+        pluto
 )
 
 set_target_properties(${PROJECT_NAME}

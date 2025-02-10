@@ -2,7 +2,6 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/deps/Pluto" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/deps/SDL" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/deps/SDL_image" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/deps/SDL_mixer" vcs="Git" />
@@ -13,6 +12,7 @@
     <mapping directory="$PROJECT_DIR$/deps/fnl" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/deps/game_modules" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/deps/mlib" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/deps/pluto" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/deps/randombytes" vcs="Git" />
   </component>
 </project>

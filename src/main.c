@@ -26,6 +26,7 @@ typedef struct singleton_game
 typedef struct component_cell_data
 {
   bool b_is_blocked;
+  bool b_has_bomb;
 } cell_data_c;
 
 typedef struct component_lifetime
@@ -34,8 +35,15 @@ typedef struct component_lifetime
   void (*on_delete_callback) (ecs_world_t *world, ecs_entity_t ent);
 } lifetime_c;
 
+typedef struct component_bomb_storage
+{
+  Sint8 max_count;
+  Sint8 count;
+} bomb_storage_c;
+
 ECS_COMPONENT_DECLARE (game_s);
 
+ECS_COMPONENT_DECLARE (bomb_storage_c);
 ECS_COMPONENT_DECLARE (cell_data_c);
 ECS_COMPONENT_DECLARE (lifetime_c);
 
@@ -46,6 +54,7 @@ cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
   for (Sint32 i = 0; i < count; i++)
     {
       cell_data[i].b_is_blocked = false;
+      cell_data[i].b_has_bomb = false;
     }
 }
 
@@ -260,6 +269,52 @@ void
 detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
 {
   create_explosion (world, ent);
+
+  const game_s *game = ecs_singleton_get (world, game_s);
+  ecs_entity_t player = game->player;
+  bomb_storage_c *bomb_storage_p = ecs_get_mut (world, player, bomb_storage_c);
+
+  const index_c *index = ecs_get (world, ent, index_c);
+
+  bomb_storage_p->count++;
+
+  ecs_entity_t cell = *arr_entity_get (
+      *mat2d_entity_get (game->cells, (size_t)index->y), (size_t)index->x);
+  cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
+  cell_data->b_has_bomb = false;
+}
+
+bool
+try_place_bomb (ecs_world_t *world)
+{
+  const game_s *game = ecs_singleton_get (world, game_s);
+  ecs_entity_t player = game->player;
+  bomb_storage_c *bomb_storage_p = ecs_get_mut (world, player, bomb_storage_c);
+  const index_c *index_p = ecs_get (world, player, index_c);
+
+  ecs_entity_t cell = *arr_entity_get (
+      *mat2d_entity_get (game->cells, (size_t)index_p->y), (size_t)index_p->x);
+  cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
+
+  log_debug (DEBUG_LOG_NONE, "Player bomb: %d", bomb_storage_p->count);
+  const bool b_player_is_out_of_bombs = bomb_storage_p->count <= 0;
+  const bool b_cell_already_has_bomb = cell_data->b_has_bomb == true;
+  if (b_player_is_out_of_bombs || b_cell_already_has_bomb)
+    {
+      return false;
+    }
+
+  ecs_entity_t pfb = ecs_lookup (world, "bomb_pfb");
+  ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+  index_c *index = ecs_get_mut (world, ent, index_c);
+  index->x = index_p->x;
+  index->y = index_p->y;
+  ecs_modified (world, ent, index_c);
+  cell_data->b_has_bomb = true;
+
+  bomb_storage_p->count--;
+
+  return true;
 }
 
 void
@@ -318,13 +373,7 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
   if (key == SDL_SCANCODE_SPACE)
     {
       {
-        ecs_entity_t pfb = ecs_lookup (world, "bomb_pfb");
-        ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-        const index_c *index_p = ecs_get (world, game->player, index_c);
-        index_c *index = ecs_get_mut (world, ent, index_c);
-        index->x = index_p->x;
-        index->y = index_p->y;
-        ecs_modified (world, ent, index_c);
+        try_place_bomb (world);
       }
     }
 }
@@ -357,15 +406,7 @@ handle_key_hold (struct input_man *input_man, SDL_Scancode key, void *param)
     }
   if (key == SDL_SCANCODE_SPACE)
     {
-      {
-        ecs_entity_t pfb = ecs_lookup (world, "bomb_pfb");
-        ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-        const index_c *index_p = ecs_get (world, game->player, index_c);
-        index_c *index = ecs_get_mut (world, ent, index_c);
-        index->x = index_p->x;
-        index->y = index_p->y;
-        ecs_modified (world, ent, index_c);
-      }
+      try_place_bomb (world);
     }
 }
 void
@@ -428,6 +469,9 @@ create_bombers (ecs_world_t *world)
     ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
     ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
     ecs_set_name (world, ent, "bomber0");
+    bomb_storage_c *bomb_storage = ecs_ensure (world, ent, bomb_storage_c);
+    bomb_storage->max_count = 2;
+    bomb_storage->count = bomb_storage->max_count;
     index_c *index = ecs_get_mut (world, ent, index_c);
     index->x = 5;
     index->y = 1;
@@ -712,6 +756,7 @@ main (int argc, char *argv[])
   game_s *game = ecs_singleton_ensure (world, game_s);
   mat2d_entity_init (game->cells);
 
+  ECS_COMPONENT_DEFINE (world, bomb_storage_c);
   ECS_COMPONENT_DEFINE (world, cell_data_c);
   ECS_COMPONENT_DEFINE (world, lifetime_c);
 

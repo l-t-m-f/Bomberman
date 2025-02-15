@@ -9,14 +9,19 @@
 #include "render_target.h"
 
 #define CELL_SIZE 32
-#define MAP_WIDTH 15
-#define MAP_HEIGHT 15
+#define MAP_CELL_COUNT_W 30
+#define MAP_CELL_COUNT_H 15
+#define MAP_WIDTH (CELL_SIZE * MAP_CELL_COUNT_W)
+#define MAP_HEIGHT (CELL_SIZE * MAP_CELL_COUNT_H)
+#define WINDOW_WDITH (MAP_WIDTH / 2)
+#define WINDOW_HEIGHT (MAP_HEIGHT)
 
 Sint32 DEBUG_LOG = DEBUG_LOG_NONE;
 
 typedef struct singleton_game
 {
   ecs_entity_t player;
+  ecs_entity_t camera;
   mat2d_entity_t cells;
   ecs_entity_t current_scene;
   dict_string_to_query_ptr_t queries;
@@ -77,12 +82,28 @@ can_character_move (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
   ecs_entity_t cell = *arr_entity_get (
       *mat2d_entity_get (game->cells, index->y + dir.y), index->x + dir.x);
   const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
-  return !cell_data->b_is_blocked;
+  if (cell_data->b_is_blocked == true)
+    {
+      return false;
+    }
+
+  movement_c *movement = ecs_get_mut (world, ent, movement_c);
+  if (movement->cooldown > 0)
+    {
+      movement->cooldown--;
+      return false;
+    }
+
+  return true;
 }
 
 static void
 try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
 {
+  if (dir.x == 0 && dir.y == 0)
+    {
+      return;
+    }
   if (can_character_move (world, ent, dir) == true)
     {
       movement_c *movement = ecs_get_mut (world, ent, movement_c);
@@ -90,7 +111,16 @@ try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
       movement->delta.x = dir.x;
       movement->delta.y = dir.y;
 
+      movement->cooldown = movement->default_cooldown;
       ecs_modified (world, ent, movement_c);
+
+      const index_c *index = ecs_get_mut (world, ent, index_c);
+
+      const game_s *game = ecs_singleton_get (world, game_s);
+      origin_c *camera_origin = ecs_get_mut (world, game->camera, origin_c);
+      camera_origin->relative.x -= (dir.x * CELL_SIZE);
+
+      ecs_modified (world, game->camera, origin_c);
     }
 }
 
@@ -105,7 +135,7 @@ create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
     {
       SDL_Point potential_spawn
           = (SDL_Point){ .x = index_b->x, .y = index_b->y - i };
-      if (potential_spawn.y < 0 || potential_spawn.y >= MAP_HEIGHT)
+      if (potential_spawn.y < 0 || potential_spawn.y >= MAP_CELL_COUNT_H)
         {
           break;
         }
@@ -121,6 +151,8 @@ create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+
+          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -140,7 +172,7 @@ create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
     {
       SDL_Point potential_spawn
           = (SDL_Point){ .x = index_b->x - i, .y = index_b->y };
-      if (potential_spawn.x < 0 || potential_spawn.x >= MAP_WIDTH)
+      if (potential_spawn.x < 0 || potential_spawn.x >= MAP_CELL_COUNT_W)
         {
           break;
         }
@@ -156,6 +188,8 @@ create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+
+          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -175,7 +209,7 @@ create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
     {
       SDL_Point potential_spawn
           = (SDL_Point){ .x = index_b->x, .y = index_b->y + i };
-      if (potential_spawn.y < 0 || potential_spawn.y >= MAP_HEIGHT)
+      if (potential_spawn.y < 0 || potential_spawn.y >= MAP_CELL_COUNT_H)
         {
           break;
         }
@@ -191,6 +225,8 @@ create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+
+          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -210,7 +246,7 @@ create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
     {
       SDL_Point potential_spawn
           = (SDL_Point){ .x = index_b->x + i, .y = index_b->y };
-      if (potential_spawn.x < 0 || potential_spawn.x >= MAP_WIDTH)
+      if (potential_spawn.x < 0 || potential_spawn.x >= MAP_CELL_COUNT_W)
         {
           break;
         }
@@ -226,6 +262,8 @@ create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+
+          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -252,6 +290,8 @@ create_explosion_center (ecs_world_t *world, ecs_entity_t ent)
       index->x = potential_spawn.x;
       index->y = potential_spawn.y;
       ecs_modified (world, new, index_c);
+
+      ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
     }
 }
 
@@ -311,6 +351,8 @@ try_place_bomb (ecs_world_t *world)
   index->y = index_p->y;
   ecs_modified (world, ent, index_c);
   cell_data->b_has_bomb = true;
+
+  ecs_add_pair (world, ent, EcsChildOf, ecs_lookup (world, "main_camera"));
 
   bomb_storage_p->count--;
 
@@ -432,9 +474,9 @@ handle_mouse_motion (struct input_man *input_man, SDL_FPoint pos,
 }
 
 SDL_FPoint
-get_relative_from_index (ecs_entity_t ent, ecs_world_t *ecs)
+get_relative_from_index (ecs_entity_t ent, ecs_world_t *world)
 {
-  const index_c *index = ecs_get (ecs, ent, index_c);
+  const index_c *index = ecs_get (world, ent, index_c);
   SDL_FPoint result = { .x = index->x * CELL_SIZE, .y = index->y * CELL_SIZE };
   return result;
 }
@@ -478,19 +520,47 @@ create_bombers (ecs_world_t *world)
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     string_set_str (sprite->name, "T_Sprite_Bomber0.png");
     game->player = ent;
+    ecs_add_pair (world, ent, EcsChildOf, ecs_lookup (world, "main_camera"));
   }
+}
+
+static void
+create_layers (ecs_world_t *world)
+{
+  const game_s *game = ecs_singleton_get (world, game_s);
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "layer_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+    ecs_set_name (world, ent, "layer_map");
+
+    layer_c *layer = ecs_get_mut (world, ent, layer_c);
+    layer->value = 0;
+
+    render_target_c *render_target = ecs_get_mut (world, ent, render_target_c);
+    string_set_str (render_target->name, "RT_static");
+    ecs_add_pair (world, ent, EcsChildOf, game->camera);
+  }
+}
+
+static void
+create_camera (ecs_world_t *world)
+{
+  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+  ecs_entity_t ent = ecs_entity (world, { .name = "main_camera" });
+  origin_c *origin = ecs_ensure (world, ent, origin_c);
+  game->camera = ent;
 }
 
 static void
 create_map (ecs_world_t *world)
 {
   game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
-  for (Sint32 j = 0; j < MAP_HEIGHT; j++)
+  for (Sint32 j = 0; j < MAP_CELL_COUNT_H; j++)
     {
       arr_entity_t row;
       arr_entity_init (row);
 
-      for (Sint32 i = 0; i < MAP_WIDTH; i++)
+      for (Sint32 i = 0; i < MAP_CELL_COUNT_W; i++)
         {
           ecs_entity_t cell = 0u;
           {
@@ -518,7 +588,8 @@ create_map (ecs_world_t *world)
           array_c *array = ecs_get_mut (world, cell, array_c);
           cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
 
-          if (i != 0 && j != 0 && i != MAP_WIDTH - 1 && j != MAP_HEIGHT - 1)
+          if (i != 0 && j != 0 && i != MAP_CELL_COUNT_W - 1
+              && j != MAP_CELL_COUNT_H - 1)
             {
               Uint8 buf;
               randombytes (&buf, sizeof (Uint8));
@@ -554,10 +625,16 @@ create_map (ecs_world_t *world)
         }
       mat2d_entity_push_back (game->cells, row);
     }
+}
+
+static void
+init_game_prefabs (ecs_world_t *world)
+{
   {
-    ecs_entity_t ent = ecs_entity (world, { .name = "static" });
+    ecs_entity_t ent = ecs_entity (
+        world, { .name = "layer_pfb", .add = ecs_ids (EcsPrefab) });
     bounds_c *bounds = ecs_ensure (world, ent, bounds_c);
-    bounds->size = (SDL_FPoint){ 480.f, 480.f };
+    bounds->size = (SDL_FPoint){ MAP_WIDTH, MAP_HEIGHT };
     box_c *box = ecs_ensure (world, ent, box_c);
     box->b_is_shown = false;
     box->b_uses_color = true;
@@ -565,19 +642,12 @@ create_map (ecs_world_t *world)
     color->default_r = 0u;
     color->default_g = 0u;
     color->default_b = 0u;
-    layer_c *layer = ecs_ensure (world, ent, layer_c);
-    layer->value = 0;
+    ecs_add (world, ent, layer_c);
     origin_c *origin = ecs_ensure (world, ent, origin_c);
     render_target_c *render_target = ecs_ensure (world, ent, render_target_c);
-    string_set_str (render_target->name, "RT_static");
     visibility_c *visibility = ecs_ensure (world, ent, visibility_c);
     visibility->b_state = true;
   }
-}
-
-static void
-init_game_prefabs (ecs_world_t *world)
-{
   {
     ecs_entity_t ent = ecs_entity (
         world, { .name = "grid_cell_pfb", .add = ecs_ids (EcsPrefab) });
@@ -615,21 +685,28 @@ init_game_prefabs (ecs_world_t *world)
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
     ecs_entity_t ent
+        = ecs_entity (world, { .name = "grid_object_static_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    cache_c *cache = ecs_ensure (world, ent, cache_c);
+    string_set_str (cache->cache_name, "RT_static");
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t ent
         = ecs_entity (world, { .name = "grid_character_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
     //    anim_player_c *anim_player = ecs_ensure (ecs, ent, anim_player_c);
+
     layer_c *layer = ecs_get_mut (world, ent, layer_c);
     layer->value = 2;
     movement_c *movement = ecs_ensure (world, ent, movement_c);
     movement->default_cooldown = 10u;
   }
   {
-    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_static_pfb");
     ecs_entity_t ent
         = ecs_entity (world, { .name = "floor_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    cache_c *cache = ecs_ensure (world, ent, cache_c);
-    string_set_str (cache->cache_name, "RT_static");
     color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 125u;
     color->default_g = 0u;
@@ -639,22 +716,18 @@ init_game_prefabs (ecs_world_t *world)
     string_set_str (sprite->name, "T_Sprite_Floor0.png");
   }
   {
-    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_static_pfb");
     ecs_entity_t ent
         = ecs_entity (world, { .name = "rock_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    cache_c *cache = ecs_ensure (world, ent, cache_c);
-    string_set_str (cache->cache_name, "RT_static");
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     string_set_str (sprite->name, "T_Sprite_Rock0.png");
   }
   {
-    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_static_pfb");
     ecs_entity_t ent
         = ecs_entity (world, { .name = "wall_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    cache_c *cache = ecs_ensure (world, ent, cache_c);
-    string_set_str (cache->cache_name, "RT_static");
     color_c *color = ecs_ensure (world, ent, color_c);
     color->default_r = 66u;
     color->default_g = 125u;
@@ -733,12 +806,10 @@ main (int argc, char *argv[])
 {
   ecs_world_t *world = ecs_init ();
 
-  SDL_Point default_size = { .x = 480, .y = 480 };
-
   struct pluto_core_params params
       = { .init_flags = SDL_INIT_VIDEO,
           .window_name = "Doomsday",
-          .window_size = (SDL_Point){ default_size.x, default_size.y },
+          .window_size = (SDL_Point){ WINDOW_WDITH, WINDOW_HEIGHT },
           .window_flags = SDL_WINDOW_RESIZABLE,
           .default_user_scaling = 1.f,
           .renderer_blend_mode = SDL_BLENDMODE_BLEND,
@@ -763,26 +834,15 @@ main (int argc, char *argv[])
   satlas_dir_to_sheets (core->atlas, "dat/gfx", false, STRING_CTE ("sprites"));
 
   render_target_add_to_pool (core->rts, STRING_CTE ("RT_static"),
-                             (SDL_Point){ default_size.x, default_size.y });
+                             (SDL_Point){ MAP_WIDTH, MAP_HEIGHT });
   render_target_clear (core->rts, STRING_CTE ("RT_static"), 0, 0, 0, 255);
 
-  {
-    ecs_entity_t ent = ecs_entity (world, { .name = "stage" });
-    bounds_c *bounds = ecs_ensure (world, ent, bounds_c);
-    bounds->size = (SDL_FPoint){ .x = (float)default_size.x - 1.f,
-                                 .y = (float)default_size.y - 1.f };
-    box_c *box = ecs_ensure (world, ent, box_c);
-    box->b_is_filled = true;
-    layer_c *layer = ecs_ensure (world, ent, layer_c);
-    origin_c *origin = ecs_ensure (world, ent, origin_c);
-    origin->relative = (SDL_FPoint){ 1.f, 1.f };
-    visibility_c *visibility = ecs_ensure (world, ent, visibility_c);
-    visibility->b_state = true;
-  }
   init_game_hooks (world);
+  create_camera (world);
   init_game_prefabs (world);
   init_game_queries (world);
   init_game_systems (world);
+  create_layers (world);
   create_map (world);
   create_bombers (world);
 

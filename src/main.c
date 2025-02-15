@@ -5,16 +5,16 @@
 
 #include "input_man.h"
 #include "log.h"
-#include "m-dict.h"
 #include "render_target.h"
+#include "util.h"
 
 #define CELL_SIZE 32
 #define MAP_CELL_COUNT_W 30
 #define MAP_CELL_COUNT_H 15
 #define MAP_WIDTH (CELL_SIZE * MAP_CELL_COUNT_W)
 #define MAP_HEIGHT (CELL_SIZE * MAP_CELL_COUNT_H)
-#define WINDOW_WDITH (MAP_WIDTH / 2)
-#define WINDOW_HEIGHT (MAP_HEIGHT)
+#define LOGIC_WIDTH (MAP_WIDTH / 2)
+#define LOGIC_HEIGHT (MAP_HEIGHT)
 
 Sint32 DEBUG_LOG = DEBUG_LOG_NONE;
 
@@ -46,17 +46,17 @@ typedef struct component_lifetime
   void (*on_delete_callback) (ecs_world_t *world, ecs_entity_t ent);
 } lifetime_c;
 
-typedef struct component_bomb_storage
+typedef struct component_scroll_to
 {
-  Sint8 max_count;
-  Sint8 count;
-} bomb_storage_c;
+  float strength;
+} scroll_to_c;
 
 ECS_COMPONENT_DECLARE (game_s);
 
 ECS_COMPONENT_DECLARE (bomb_storage_c);
 ECS_COMPONENT_DECLARE (cell_data_c);
 ECS_COMPONENT_DECLARE (lifetime_c);
+ECS_COMPONENT_DECLARE (scroll_to_c);
 
 static void
 cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
@@ -103,13 +103,13 @@ can_character_move (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
   return true;
 }
 
-void
-move_camera (ecs_world_t *world, const Sint32 dir)
+float
+get_camera_relative_x (ecs_entity_t ent, ecs_world_t *world)
 {
-  const game_s *game = ecs_singleton_get (world, game_s);
-  origin_c *camera_origin = ecs_get_mut (world, game->camera, origin_c);
-  camera_origin->relative.x -= (float)(dir * CELL_SIZE);
-  ecs_modified (world, game->camera, origin_c);
+  static float last_relative_x;
+  const core_s *core = ecs_singleton_get (world, core_s);
+  last_relative_x = lerp_f (last_relative_x, core->scroll_value.x, 1.2f);
+  return -last_relative_x;
 }
 
 static void
@@ -128,8 +128,6 @@ try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
 
       movement->cooldown = movement->default_cooldown;
       ecs_modified (world, ent, movement_c);
-
-      move_camera (world, dir.x);
     }
 }
 
@@ -160,9 +158,6 @@ create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
-
-          ecs_add_pair (world, new, EcsChildOf,
-                        ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -198,9 +193,6 @@ create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
-
-          ecs_add_pair (world, new, EcsChildOf,
-                        ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -236,9 +228,6 @@ create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
-
-          ecs_add_pair (world, new, EcsChildOf,
-                        ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -274,9 +263,6 @@ create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
-
-          ecs_add_pair (world, new, EcsChildOf,
-                        ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -303,8 +289,6 @@ create_explosion_center (ecs_world_t *world, ecs_entity_t ent)
       index->x = potential_spawn.x;
       index->y = potential_spawn.y;
       ecs_modified (world, new, index_c);
-
-      ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
     }
 }
 
@@ -364,8 +348,6 @@ try_place_bomb (ecs_world_t *world)
   index->y = index_p->y;
   ecs_modified (world, ent, index_c);
   cell_data->b_has_bomb = true;
-
-  ecs_add_pair (world, ent, EcsChildOf, ecs_lookup (world, "main_camera"));
 
   bomb_storage_p->count--;
 
@@ -517,6 +499,35 @@ system_lifetime_progress (ecs_iter_t *it)
 }
 
 static void
+system_scroll_to_update (ecs_iter_t *it)
+{
+  log_debug (DEBUG_LOG_SPAM, "Entered <Update> scroll to system!");
+
+  scroll_to_c *scroll_to = ecs_field (it, scroll_to_c, 0);
+  origin_c *origin = ecs_field (it, origin_c, 1);
+
+  core_s *core = ecs_get_mut (it->world, ecs_id (core_s), core_s);
+
+  SDL_FPoint total = { .x = 0.f, .y = 0.f };
+  for (Sint32 i = 0; i < it->count; i++)
+    {
+      total.x += origin[i].world.x;
+      total.y += origin[i].world.y;
+    }
+  total.x /= (float)it->count;
+  total.y /= (float)it->count;
+
+  SDL_FPoint offset = { LOGIC_WIDTH / 2.0f, LOGIC_HEIGHT / 2.0f };
+
+  core->scroll_value.x
+      = lerp_f (core->scroll_value.x, total.x - offset.x, 0.03f);
+  core->scroll_value.y
+      = lerp_f (core->scroll_value.y, total.y - offset.y, 0.03f);
+
+  log_debug (0, "DEBUG >> scroll_value = (%.1f, %.1f)", total.x, total.y);
+}
+
+static void
 create_bombers (ecs_world_t *world)
 {
   game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
@@ -530,10 +541,10 @@ create_bombers (ecs_world_t *world)
     index_c *index = ecs_get_mut (world, ent, index_c);
     index->x = 5;
     index->y = 1;
+    ecs_add (world, ent, scroll_to_c);
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     string_set_str (sprite->name, "T_Sprite_Bomber0.png");
     game->player = ent;
-    ecs_add_pair (world, ent, EcsChildOf, ecs_lookup (world, "main_camera"));
   }
 }
 
@@ -551,17 +562,7 @@ create_layers (ecs_world_t *world)
 
     render_target_c *render_target = ecs_get_mut (world, ent, render_target_c);
     string_set_str (render_target->name, "RT_static");
-    ecs_add_pair (world, ent, EcsChildOf, game->camera);
   }
-}
-
-static void
-create_camera (ecs_world_t *world)
-{
-  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
-  ecs_entity_t ent = ecs_entity (world, { .name = "main_camera" });
-  origin_c *origin = ecs_ensure (world, ent, origin_c);
-  game->camera = ent;
 }
 
 static void
@@ -702,6 +703,9 @@ init_game_prefabs (ecs_world_t *world)
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
     cache_c *cache = ecs_ensure (world, ent, cache_c);
     string_set_str (cache->cache_name, "RT_static");
+
+    origin_c *origin = ecs_get_mut (world, ent, origin_c);
+    origin->b_is_screen_based = true;
   }
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
@@ -802,6 +806,8 @@ static void
 init_game_systems (ecs_world_t *world)
 {
   ECS_SYSTEM (world, system_lifetime_progress, EcsOnUpdate, lifetime_c);
+  ECS_SYSTEM (world, system_scroll_to_update, EcsOnUpdate, scroll_to_c,
+              origin_c);
 }
 
 static void
@@ -822,7 +828,7 @@ main (int argc, char *argv[])
   struct pluto_core_params params
       = { .init_flags = SDL_INIT_VIDEO,
           .window_name = "Doomsday",
-          .window_size = (SDL_Point){ WINDOW_WDITH, WINDOW_HEIGHT },
+          .window_size = (SDL_Point){ LOGIC_WIDTH, LOGIC_HEIGHT },
           .window_flags = SDL_WINDOW_RESIZABLE,
           .default_user_scaling = 1.f,
           .renderer_blend_mode = SDL_BLENDMODE_BLEND,
@@ -843,6 +849,7 @@ main (int argc, char *argv[])
   ECS_COMPONENT_DEFINE (world, bomb_storage_c);
   ECS_COMPONENT_DEFINE (world, cell_data_c);
   ECS_COMPONENT_DEFINE (world, lifetime_c);
+  ECS_COMPONENT_DEFINE (world, scroll_to_c);
 
   satlas_dir_to_sheets (core->atlas, "dat/gfx", false, STRING_CTE ("sprites"));
 
@@ -851,7 +858,6 @@ main (int argc, char *argv[])
   render_target_clear (core->rts, STRING_CTE ("RT_static"), 0, 0, 0, 255);
 
   init_game_hooks (world);
-  create_camera (world);
   init_game_prefabs (world);
   init_game_queries (world);
   init_game_systems (world);
@@ -901,6 +907,9 @@ main (int argc, char *argv[])
       try_move_character (world, game->player, game->control_delta);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 0, 255);
       SDL_RenderClear (core->rend);
+      SDL_SetRenderDrawColor (core->rend, 0, 0, 188, 255);
+      SDL_RenderFillRect (core->rend,
+                          &(SDL_FRect){ 0.f, 0.f, LOGIC_WIDTH, LOGIC_HEIGHT });
       ecs_progress (world, 0.f);
       SDL_RenderPresent (core->rend);
     }

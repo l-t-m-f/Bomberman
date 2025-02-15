@@ -7,4 +7,4 @@ https://dev.azure.com/LetTheMiceFree/_git/pluto
 
 https://dev.azure.com/LetTheMiceFree/_git/game_modules
 
-![DoomsdayScreenshot0](https://github.com/user-attachments/assets/c73aa007-a1df-4141-95a3-c859c24ab553)
+<img src="https://github.com/user-attachments/assets/c73aa007-a1df-4141-95a3-c859c24ab553" width="480" />

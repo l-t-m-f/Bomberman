@@ -28,6 +28,12 @@ typedef struct singleton_game
   SDL_Point control_delta;
 } game_s;
 
+typedef struct component_bomb_storage
+{
+  Sint8 max_count;
+  Sint8 count;
+} bomb_storage_c;
+
 typedef struct component_cell_data
 {
   bool b_is_blocked;
@@ -97,6 +103,15 @@ can_character_move (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
   return true;
 }
 
+void
+move_camera (ecs_world_t *world, const Sint32 dir)
+{
+  const game_s *game = ecs_singleton_get (world, game_s);
+  origin_c *camera_origin = ecs_get_mut (world, game->camera, origin_c);
+  camera_origin->relative.x -= (float)(dir * CELL_SIZE);
+  ecs_modified (world, game->camera, origin_c);
+}
+
 static void
 try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
 {
@@ -114,13 +129,7 @@ try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
       movement->cooldown = movement->default_cooldown;
       ecs_modified (world, ent, movement_c);
 
-      const index_c *index = ecs_get_mut (world, ent, index_c);
-
-      const game_s *game = ecs_singleton_get (world, game_s);
-      origin_c *camera_origin = ecs_get_mut (world, game->camera, origin_c);
-      camera_origin->relative.x -= (dir.x * CELL_SIZE);
-
-      ecs_modified (world, game->camera, origin_c);
+      move_camera (world, dir.x);
     }
 }
 
@@ -152,7 +161,8 @@ create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
 
-          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
+          ecs_add_pair (world, new, EcsChildOf,
+                        ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -189,7 +199,8 @@ create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
 
-          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
+          ecs_add_pair (world, new, EcsChildOf,
+                        ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -226,7 +237,8 @@ create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
 
-          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
+          ecs_add_pair (world, new, EcsChildOf,
+                        ecs_lookup (world, "main_camera"));
         }
       else
         {
@@ -263,7 +275,8 @@ create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
 
-          ecs_add_pair (world, new, EcsChildOf, ecs_lookup (world, "main_camera"));
+          ecs_add_pair (world, new, EcsChildOf,
+                        ecs_lookup (world, "main_camera"));
         }
       else
         {

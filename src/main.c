@@ -20,12 +20,12 @@ Sint32 DEBUG_LOG = DEBUG_LOG_NONE;
 
 typedef struct singleton_game
 {
-  ecs_entity_t player;
+  ecs_entity_t P1;
+  ecs_entity_t P2;
   ecs_entity_t camera;
   mat2d_entity_t cells;
   ecs_entity_t current_scene;
   dict_string_to_query_ptr_t queries;
-  SDL_Point control_delta;
 } game_s;
 
 typedef struct component_bomb_storage
@@ -46,10 +46,17 @@ typedef struct component_lifetime
   void (*on_delete_callback) (ecs_world_t *world, ecs_entity_t ent);
 } lifetime_c;
 
+typedef struct component_controller
+{
+  SDL_Point control_delta;
+  ecs_entity_t pawn;
+} controller_c;
+
 ECS_COMPONENT_DECLARE (game_s);
 
 ECS_COMPONENT_DECLARE (bomb_storage_c);
 ECS_COMPONENT_DECLARE (cell_data_c);
+ECS_COMPONENT_DECLARE (controller_c);
 ECS_COMPONENT_DECLARE (lifetime_c);
 
 static void
@@ -60,6 +67,17 @@ cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
     {
       cell_data[i].b_is_blocked = false;
       cell_data[i].b_has_bomb = false;
+    }
+}
+
+static void
+controller (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
+{
+  controller_c *controller = ptr;
+  for (Sint32 i = 0; i < count; i++)
+    {
+      controller[i].control_delta = (SDL_Point){ .x = 0, .y = 0 };
+      controller[i].pawn = 0u;
     }
 }
 
@@ -107,21 +125,25 @@ get_camera_relative_x (ecs_entity_t ent, ecs_world_t *world)
 }
 
 static void
-try_move_character (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
+try_move_character (ecs_world_t *world, ecs_entity_t ent)
 {
-  if (dir.x == 0 && dir.y == 0)
+  const controller_c *controller = ecs_get (world, ent, controller_c);
+
+  if (controller->control_delta.x == 0 && controller->control_delta.y == 0)
     {
       return;
     }
-  if (can_character_move (world, ent, dir) == true)
-    {
-      movement_c *movement = ecs_get_mut (world, ent, movement_c);
 
-      movement->delta.x = dir.x;
-      movement->delta.y = dir.y;
+  if (can_character_move (world, controller->pawn, controller->control_delta)
+      == true)
+    {
+      movement_c *movement = ecs_get_mut (world, controller->pawn, movement_c);
+
+      movement->delta.x = controller->control_delta.x;
+      movement->delta.y = controller->control_delta.y;
 
       movement->cooldown = movement->default_cooldown;
-      ecs_modified (world, ent, movement_c);
+      ecs_modified (world, controller->pawn, movement_c);
     }
 }
 
@@ -302,7 +324,7 @@ detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
   create_explosion (world, ent);
 
   const game_s *game = ecs_singleton_get (world, game_s);
-  ecs_entity_t player = game->player;
+  ecs_entity_t player = game->P1;
   bomb_storage_c *bomb_storage_p = ecs_get_mut (world, player, bomb_storage_c);
 
   const index_c *index = ecs_get (world, ent, index_c);
@@ -316,12 +338,15 @@ detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
 }
 
 bool
-try_place_bomb (ecs_world_t *world)
+try_place_bomb (ecs_world_t *world, ecs_entity_t player)
 {
   const game_s *game = ecs_singleton_get (world, game_s);
-  ecs_entity_t player = game->player;
-  bomb_storage_c *bomb_storage_p = ecs_get_mut (world, player, bomb_storage_c);
-  const index_c *index_p = ecs_get (world, player, index_c);
+
+  const controller_c *controller = ecs_get (world, player, controller_c);
+
+  bomb_storage_c *bomb_storage_p
+      = ecs_get_mut (world, controller->pawn, bomb_storage_c);
+  const index_c *index_p = ecs_get (world, controller->pawn, index_c);
 
   ecs_entity_t cell = *arr_entity_get (
       *mat2d_entity_get (game->cells, (size_t)index_p->y), (size_t)index_p->x);
@@ -385,26 +410,60 @@ handle_key_press (struct input_man *input_man, SDL_Scancode key, void *param)
             }
         }
     }
+
+  /* Player 1. */
   if (key == SDL_SCANCODE_W)
     {
-      game->control_delta.y = -1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.y = -1;
     }
   if (key == SDL_SCANCODE_A)
     {
-      game->control_delta.x = -1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.x = -1;
     }
   if (key == SDL_SCANCODE_S)
     {
-      game->control_delta.y = 1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.y = 1;
     }
   if (key == SDL_SCANCODE_D)
     {
-      game->control_delta.x = 1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.x = 1;
     }
   if (key == SDL_SCANCODE_SPACE)
     {
       {
-        try_place_bomb (world);
+        try_place_bomb (world, game->P1);
+      }
+    }
+
+  /* Player 2.*/
+  if (key == SDL_SCANCODE_UP)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.y = -1;
+    }
+  if (key == SDL_SCANCODE_LEFT)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.x = -1;
+    }
+  if (key == SDL_SCANCODE_DOWN)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.y = 1;
+    }
+  if (key == SDL_SCANCODE_RIGHT)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.x = 1;
+    }
+  if (key == SDL_SCANCODE_RSHIFT)
+    {
+      {
+        try_place_bomb (world, game->P2);
       }
     }
 }
@@ -419,25 +478,61 @@ handle_key_hold (struct input_man *input_man, SDL_Scancode key, void *param)
 {
   ecs_world_t *world = param;
   game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+
+  /* Player 1. */
   if (key == SDL_SCANCODE_W)
     {
-      game->control_delta.y = -1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.y = -1;
     }
   if (key == SDL_SCANCODE_A)
     {
-      game->control_delta.x = -1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.x = -1;
     }
   if (key == SDL_SCANCODE_S)
     {
-      game->control_delta.y = 1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.y = 1;
     }
   if (key == SDL_SCANCODE_D)
     {
-      game->control_delta.x = 1;
+      controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+      controller->control_delta.x = 1;
     }
   if (key == SDL_SCANCODE_SPACE)
     {
-      try_place_bomb (world);
+      {
+        try_place_bomb (world, game->P1);
+      }
+    }
+
+  /* Player 2.*/
+  if (key == SDL_SCANCODE_UP)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.y = -1;
+    }
+  if (key == SDL_SCANCODE_LEFT)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.x = -1;
+    }
+  if (key == SDL_SCANCODE_DOWN)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.y = 1;
+    }
+  if (key == SDL_SCANCODE_RIGHT)
+    {
+      controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+      controller->control_delta.x = 1;
+    }
+  if (key == SDL_SCANCODE_RSHIFT)
+    {
+      {
+        try_place_bomb (world, game->P2);
+      }
     }
 }
 void
@@ -495,21 +590,48 @@ system_lifetime_progress (ecs_iter_t *it)
 static void
 create_bombers (ecs_world_t *world)
 {
-  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+  const game_s *game = ecs_singleton_get (world, game_s);
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
     ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-    ecs_set_name (world, ent, "bomber0");
+    ecs_set_name (world, ent, "bomber1");
+
     bomb_storage_c *bomb_storage = ecs_ensure (world, ent, bomb_storage_c);
     bomb_storage->max_count = 2;
     bomb_storage->count = bomb_storage->max_count;
+
     index_c *index = ecs_get_mut (world, ent, index_c);
     index->x = 5;
     index->y = 1;
+
     ecs_add (world, ent, scroll_to_c);
+
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
-    string_set_str (sprite->name, "T_Sprite_Bomber0.png");
-    game->player = ent;
+    string_set_str (sprite->name, "T_Flipbook_Bomber1.png");
+
+    controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
+    controller->pawn = ent;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+    ecs_set_name (world, ent, "bomber2");
+
+    bomb_storage_c *bomb_storage = ecs_ensure (world, ent, bomb_storage_c);
+    bomb_storage->max_count = 2;
+    bomb_storage->count = bomb_storage->max_count;
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 9;
+    index->y = 8;
+
+    ecs_add (world, ent, scroll_to_c);
+
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+    string_set_str (sprite->name, "T_Flipbook_Bomber2.png");
+
+    controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+    controller->pawn = ent;
   }
 }
 
@@ -527,6 +649,28 @@ create_layers (ecs_world_t *world)
 
     render_target_c *render_target = ecs_get_mut (world, ent, render_target_c);
     string_set_str (render_target->name, "RT_static");
+  }
+}
+
+static void
+create_player_controllers (ecs_world_t *world)
+{
+  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+  {
+    ecs_entity_t ent = ecs_entity (
+        world,
+        { .name = "player1",
+          .add = ecs_ids (EcsPrefab, ecs_isa (ecs_lookup (
+                                         world, "player_controller_pfb"))) });
+    game->P1 = ent;
+  }
+  {
+    ecs_entity_t ent = ecs_entity (
+        world,
+        { .name = "player2",
+          .add = ecs_ids (EcsPrefab, ecs_isa (ecs_lookup (
+                                         world, "player_controller_pfb"))) });
+    game->P2 = ent;
   }
 }
 
@@ -609,6 +753,11 @@ create_map (ecs_world_t *world)
 static void
 init_game_prefabs (ecs_world_t *world)
 {
+  {
+    ecs_entity_t ent = ecs_entity (world, { .name = "player_controller_pfb",
+                                            .add = ecs_ids (EcsPrefab) });
+    ecs_add (world, ent, controller_c);
+  }
   {
     ecs_entity_t ent = ecs_entity (
         world, { .name = "layer_pfb", .add = ecs_ids (EcsPrefab) });
@@ -708,6 +857,14 @@ init_game_prefabs (ecs_world_t *world)
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_static_pfb");
     ecs_entity_t ent
+        = ecs_entity (world, { .name = "factory_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+    string_set_str (sprite->name, "T_Sprite_Factory.png");
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_static_pfb");
+    ecs_entity_t ent
         = ecs_entity (world, { .name = "wall_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
     color_c *color = ecs_ensure (world, ent, color_c);
@@ -726,7 +883,7 @@ init_game_prefabs (ecs_world_t *world)
     lifetime_c *lifetime = ecs_ensure (world, ent, lifetime_c);
     lifetime->on_delete_callback = detonate_bomb;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
-    string_set_str (sprite->name, "T_Sprite_Bomb0.png");
+    string_set_str (sprite->name, "T_Flipbook_Bomb.png");
   }
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
@@ -779,6 +936,9 @@ init_game_hooks (ecs_world_t *world)
   ecs_type_hooks_t cell_data_hooks = { .ctor = cell_data };
   ecs_set_hooks_id (world, ecs_id (cell_data_c), &cell_data_hooks);
 
+  ecs_type_hooks_t controller_hooks = { .ctor = controller };
+  ecs_set_hooks_id (world, ecs_id (controller_c), &controller_hooks);
+
   ecs_type_hooks_t lifetime_hooks = { .ctor = lifetime };
   ecs_set_hooks_id (world, ecs_id (lifetime_c), &lifetime_hooks);
 }
@@ -811,6 +971,7 @@ main (int argc, char *argv[])
 
   ECS_COMPONENT_DEFINE (world, bomb_storage_c);
   ECS_COMPONENT_DEFINE (world, cell_data_c);
+  ECS_COMPONENT_DEFINE (world, controller_c);
   ECS_COMPONENT_DEFINE (world, lifetime_c);
 
   satlas_dir_to_sheets (core->atlas, "dat/gfx", false, STRING_CTE ("sprites"));
@@ -823,6 +984,7 @@ main (int argc, char *argv[])
   init_game_prefabs (world);
   init_game_queries (world);
   init_game_systems (world);
+  create_player_controllers (world);
   create_layers (world);
   create_map (world);
   create_bombers (world);
@@ -830,8 +992,17 @@ main (int argc, char *argv[])
   SDL_Event e;
   while (1)
     {
-      game->control_delta.x = 0;
-      game->control_delta.y = 0;
+
+      controller_c *controller_p1
+          = ecs_get_mut (world, game->P1, controller_c);
+      controller_p1->control_delta.x = 0;
+      controller_p1->control_delta.y = 0;
+
+      controller_c *controller_p2
+          = ecs_get_mut (world, game->P2, controller_c);
+      controller_p2->control_delta.x = 0;
+      controller_p2->control_delta.y = 0;
+
       while (SDL_PollEvent (&e) > 0)
         {
           if (e.type == SDL_EVENT_QUIT)
@@ -866,7 +1037,8 @@ main (int argc, char *argv[])
             }
         }
       input_man_bounce_keys (core->input_man, world);
-      try_move_character (world, game->player, game->control_delta);
+      try_move_character (world, game->P1);
+      try_move_character (world, game->P2);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 0, 255);
       SDL_RenderClear (core->rend);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 188, 255);

@@ -695,6 +695,24 @@ create_player_controllers (ecs_world_t *world)
 static void
 create_map (ecs_world_t *world)
 {
+  SDL_IOStream *io_stream = SDL_IOFromFile ("dat/maps/map0.txt", "r");
+  for (Sint32 j = 0; j < MAP_CELL_COUNT_H; j++)
+    {
+      Sint32 count = 0; // Track valid characters per row
+
+      while (count < MAP_CELL_COUNT_W)
+        {
+          char c = 0;
+          SDL_ReadIO (io_stream, &c, sizeof (char));
+
+          if (c == '\n' || c == '\r')
+            continue; // Skip newline characters
+
+          log_debug (0, "%c", c); // Print the valid map character
+          count++; // Only increment when a valid character is read
+        }
+    }
+
   game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
   for (Sint32 j = 0; j < MAP_CELL_COUNT_H; j++)
     {
@@ -703,6 +721,7 @@ create_map (ecs_world_t *world)
 
       for (Sint32 i = 0; i < MAP_CELL_COUNT_W; i++)
         {
+
           ecs_entity_t cell = 0u;
           {
             ecs_entity_t pfb = ecs_lookup (world, "grid_cell_pfb");

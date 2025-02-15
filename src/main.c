@@ -46,17 +46,11 @@ typedef struct component_lifetime
   void (*on_delete_callback) (ecs_world_t *world, ecs_entity_t ent);
 } lifetime_c;
 
-typedef struct component_scroll_to
-{
-  float strength;
-} scroll_to_c;
-
 ECS_COMPONENT_DECLARE (game_s);
 
 ECS_COMPONENT_DECLARE (bomb_storage_c);
 ECS_COMPONENT_DECLARE (cell_data_c);
 ECS_COMPONENT_DECLARE (lifetime_c);
-ECS_COMPONENT_DECLARE (scroll_to_c);
 
 static void
 cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
@@ -499,35 +493,6 @@ system_lifetime_progress (ecs_iter_t *it)
 }
 
 static void
-system_scroll_to_update (ecs_iter_t *it)
-{
-  log_debug (DEBUG_LOG_SPAM, "Entered <Update> scroll to system!");
-
-  scroll_to_c *scroll_to = ecs_field (it, scroll_to_c, 0);
-  origin_c *origin = ecs_field (it, origin_c, 1);
-
-  core_s *core = ecs_get_mut (it->world, ecs_id (core_s), core_s);
-
-  SDL_FPoint total = { .x = 0.f, .y = 0.f };
-  for (Sint32 i = 0; i < it->count; i++)
-    {
-      total.x += origin[i].world.x;
-      total.y += origin[i].world.y;
-    }
-  total.x /= (float)it->count;
-  total.y /= (float)it->count;
-
-  SDL_FPoint offset = { LOGIC_WIDTH / 2.0f, LOGIC_HEIGHT / 2.0f };
-
-  core->scroll_value.x
-      = lerp_f (core->scroll_value.x, total.x - offset.x, 0.03f);
-  core->scroll_value.y
-      = lerp_f (core->scroll_value.y, total.y - offset.y, 0.03f);
-
-  log_debug (0, "DEBUG >> scroll_value = (%.1f, %.1f)", total.x, total.y);
-}
-
-static void
 create_bombers (ecs_world_t *world)
 {
   game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
@@ -806,8 +771,6 @@ static void
 init_game_systems (ecs_world_t *world)
 {
   ECS_SYSTEM (world, system_lifetime_progress, EcsOnUpdate, lifetime_c);
-  ECS_SYSTEM (world, system_scroll_to_update, EcsOnUpdate, scroll_to_c,
-              origin_c);
 }
 
 static void
@@ -827,16 +790,16 @@ main (int argc, char *argv[])
 
   struct pluto_core_params params
       = { .init_flags = SDL_INIT_VIDEO,
+          .default_win_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
           .window_name = "Doomsday",
-          .window_size = (SDL_Point){ LOGIC_WIDTH, LOGIC_HEIGHT },
           .window_flags = SDL_WINDOW_RESIZABLE,
           .default_user_scaling = 1.f,
           .renderer_blend_mode = SDL_BLENDMODE_BLEND,
-          .logical_presentation_mode = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE,
-          .b_has_logical_size = true,
           .gpu_driver_hint = "vulkan",
           .b_is_DPI_aware = false,
           .b_should_debug_GPU = true,
+          .b_has_logical_size = true,
+          .logical_presentation_mode = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE,
           .input_data = { .b_is_resizing_widget = false,
                           .b_is_dragging_widget = false,
                           .b_is_moving_camera = false } };
@@ -849,7 +812,6 @@ main (int argc, char *argv[])
   ECS_COMPONENT_DEFINE (world, bomb_storage_c);
   ECS_COMPONENT_DEFINE (world, cell_data_c);
   ECS_COMPONENT_DEFINE (world, lifetime_c);
-  ECS_COMPONENT_DEFINE (world, scroll_to_c);
 
   satlas_dir_to_sheets (core->atlas, "dat/gfx", false, STRING_CTE ("sprites"));
 

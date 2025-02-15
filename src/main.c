@@ -115,15 +115,6 @@ can_character_move (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
   return true;
 }
 
-float
-get_camera_relative_x (ecs_entity_t ent, ecs_world_t *world)
-{
-  static float last_relative_x;
-  const core_s *core = ecs_singleton_get (world, core_s);
-  last_relative_x = lerp_f (last_relative_x, core->scroll_value.x, 1.2f);
-  return -last_relative_x;
-}
-
 static void
 try_move_character (ecs_world_t *world, ecs_entity_t ent)
 {
@@ -150,6 +141,9 @@ try_move_character (ecs_world_t *world, ecs_entity_t ent)
 static void
 create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
 {
+  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
+  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
+
   ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
   const game_s *game = ecs_singleton_get (world, game_s);
   const index_c *index_b = ecs_get (world, ent, index_c);
@@ -174,6 +168,7 @@ create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+          ecs_add_pair (world, new, instigator_rel, instigator);
         }
       else
         {
@@ -185,6 +180,9 @@ create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
 static void
 create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
 {
+  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
+  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
+
   ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
   const game_s *game = ecs_singleton_get (world, game_s);
   const index_c *index_b = ecs_get (world, ent, index_c);
@@ -209,6 +207,7 @@ create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+          ecs_add_pair (world, new, instigator_rel, instigator);
         }
       else
         {
@@ -220,6 +219,9 @@ create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
 static void
 create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
 {
+  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
+  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
+
   ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
   const game_s *game = ecs_singleton_get (world, game_s);
   const index_c *index_b = ecs_get (world, ent, index_c);
@@ -244,6 +246,7 @@ create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+          ecs_add_pair (world, new, instigator_rel, instigator);
         }
       else
         {
@@ -255,6 +258,9 @@ create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
 static void
 create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
 {
+  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
+  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
+
   ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
   const game_s *game = ecs_singleton_get (world, game_s);
   const index_c *index_b = ecs_get (world, ent, index_c);
@@ -279,6 +285,7 @@ create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
           index->x = potential_spawn.x;
           index->y = potential_spawn.y;
           ecs_modified (world, new, index_c);
+          ecs_add_pair (world, new, instigator_rel, instigator);
         }
       else
         {
@@ -290,6 +297,9 @@ create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
 static void
 create_explosion_center (ecs_world_t *world, ecs_entity_t ent)
 {
+  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
+  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
+
   ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
   const game_s *game = ecs_singleton_get (world, game_s);
   const index_c *index_b = ecs_get (world, ent, index_c);
@@ -305,6 +315,7 @@ create_explosion_center (ecs_world_t *world, ecs_entity_t ent)
       index->x = potential_spawn.x;
       index->y = potential_spawn.y;
       ecs_modified (world, new, index_c);
+      ecs_add_pair (world, new, instigator_rel, instigator);
     }
 }
 
@@ -324,8 +335,12 @@ detonate_bomb (ecs_world_t *world, ecs_entity_t ent)
   create_explosion (world, ent);
 
   const game_s *game = ecs_singleton_get (world, game_s);
-  ecs_entity_t player = game->P1;
-  bomb_storage_c *bomb_storage_p = ecs_get_mut (world, player, bomb_storage_c);
+
+  ecs_entity_t instigator
+      = ecs_get_target (world, ent, ecs_lookup (world, "instigator"), 0);
+
+  bomb_storage_c *bomb_storage_p
+      = ecs_get_mut (world, instigator, bomb_storage_c);
 
   const index_c *index = ecs_get (world, ent, index_c);
 
@@ -367,6 +382,9 @@ try_place_bomb (ecs_world_t *world, ecs_entity_t player)
   index->y = index_p->y;
   ecs_modified (world, ent, index_c);
   cell_data->b_has_bomb = true;
+
+  ecs_add_pair (world, ent, ecs_lookup (world, "instigator"),
+                controller->pawn);
 
   bomb_storage_p->count--;
 
@@ -964,6 +982,9 @@ main (int argc, char *argv[])
                           .b_is_dragging_widget = false,
                           .b_is_moving_camera = false } };
   core_s *core = init_pluto (world, &params);
+  core->b_ignore_scroll_y = true;
+
+  ECS_TAG (world, instigator);
 
   ECS_COMPONENT_DEFINE (world, game_s);
   game_s *game = ecs_singleton_ensure (world, game_s);

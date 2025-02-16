@@ -695,32 +695,37 @@ create_player_controllers (ecs_world_t *world)
 static void
 create_map (ecs_world_t *world)
 {
+  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+
   SDL_IOStream *io_stream = SDL_IOFromFile ("dat/maps/map0.txt", "r");
-  for (Sint32 j = 0; j < MAP_CELL_COUNT_H; j++)
+  if (!io_stream)
     {
-      Sint32 count = 0; // Track valid characters per row
-
-      while (count < MAP_CELL_COUNT_W)
-        {
-          char c = 0;
-          SDL_ReadIO (io_stream, &c, sizeof (char));
-
-          if (c == '\n' || c == '\r')
-            continue; // Skip newline characters
-
-          log_debug (0, "%c", c); // Print the valid map character
-          count++; // Only increment when a valid character is read
-        }
+      log_error (0, "Failed to open map file");
+      return;
     }
 
-  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
   for (Sint32 j = 0; j < MAP_CELL_COUNT_H; j++)
     {
       arr_entity_t row;
       arr_entity_init (row);
 
-      for (Sint32 i = 0; i < MAP_CELL_COUNT_W; i++)
+      Sint32 i = 0; // Track valid characters per row
+
+      while (i < MAP_CELL_COUNT_W)
         {
+          char c = 0;
+          if (SDL_ReadIO (io_stream, &c, sizeof (char)) != sizeof (char))
+            {
+              log_error (0, "Failed to read from map file");
+              break;
+            }
+
+          if (SDL_isalnum (c) == false)
+            {
+              continue;
+            }
+
+          log_debug (DEBUG_LOG_SPAM, "%c", c);
 
           ecs_entity_t cell = 0u;
           {
@@ -728,6 +733,7 @@ create_map (ecs_world_t *world)
             cell = ecs_new_w_pair (world, EcsIsA, pfb);
             string_t temp;
             string_init_printf (temp, "cell_%d_%d", i, j);
+            log_debug (0, "Cell %s created...", string_get_cstr (temp));
             ecs_set_name (world, cell, string_get_cstr (temp));
             index_c *index = ecs_get_mut (world, cell, index_c);
             index->x = i;
@@ -748,43 +754,52 @@ create_map (ecs_world_t *world)
           array_c *array = ecs_get_mut (world, cell, array_c);
           cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
 
-          if (i != 0 && j != 0 && i != MAP_CELL_COUNT_W - 1
-              && j != MAP_CELL_COUNT_H - 1)
+          switch (c)
             {
-              Uint8 buf;
-              randombytes (&buf, sizeof (Uint8));
-              if (buf < 40u)
-                {
-                  {
-                    ecs_entity_t pfb = ecs_lookup (world, "rock_pfb");
-                    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-                    string_t temp;
-                    string_init_printf (temp, "rock_%d_%d", i, j);
-                    ecs_set_name (world, ent, string_get_cstr (temp));
-                    index_c *index = ecs_get_mut (world, ent, index_c);
-                    index->x = i;
-                    index->y = j;
-                    cell_data->b_is_blocked = true;
-                    arr_entity_push_back (array->content, ent);
-                  }
-                }
-              continue;
+            case '0':
+              {
+                break;
+              }
+            case '1':
+              {
+                ecs_entity_t pfb = ecs_lookup (world, "wall_pfb");
+                ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+                string_t temp;
+                string_init_printf (temp, "wall_%d_%d", i, j);
+                ecs_set_name (world, ent, string_get_cstr (temp));
+                index_c *index = ecs_get_mut (world, ent, index_c);
+                index->x = i;
+                index->y = j;
+                cell_data->b_is_blocked = true;
+                arr_entity_push_back (array->content, ent);
+                break;
+              }
+            case '2':
+              {
+                ecs_entity_t pfb = ecs_lookup (world, "rock_pfb");
+                ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+                string_t temp;
+                string_init_printf (temp, "rock_%d_%d", i, j);
+                ecs_set_name (world, ent, string_get_cstr (temp));
+                index_c *index = ecs_get_mut (world, ent, index_c);
+                index->x = i;
+                index->y = j;
+                cell_data->b_is_blocked = true;
+                arr_entity_push_back (array->content, ent);
+                break;
+              }
+            default:
+              {
+                break;
+              }
             }
-          {
-            ecs_entity_t pfb = ecs_lookup (world, "wall_pfb");
-            ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-            string_t temp;
-            string_init_printf (temp, "wall_%d_%d", i, j);
-            ecs_set_name (world, ent, string_get_cstr (temp));
-            index_c *index = ecs_get_mut (world, ent, index_c);
-            index->x = i;
-            index->y = j;
-            cell_data->b_is_blocked = true;
-            arr_entity_push_back (array->content, ent);
-          }
+
+          i++;
         }
       mat2d_entity_push_back (game->cells, row);
     }
+
+  SDL_CloseIO (io_stream);
 }
 
 static void

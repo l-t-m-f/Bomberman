@@ -754,6 +754,8 @@ create_map (ecs_world_t *world)
           array_c *array = ecs_get_mut (world, cell, array_c);
           cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
 
+          ecs_entity_t pfb = 0u;
+          string_t temp;
           switch (c)
             {
             case '0':
@@ -762,36 +764,33 @@ create_map (ecs_world_t *world)
               }
             case '1':
               {
-                ecs_entity_t pfb = ecs_lookup (world, "wall_pfb");
-                ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-                string_t temp;
+                pfb = ecs_lookup (world, "wall_pfb");
                 string_init_printf (temp, "wall_%d_%d", i, j);
-                ecs_set_name (world, ent, string_get_cstr (temp));
-                index_c *index = ecs_get_mut (world, ent, index_c);
-                index->x = i;
-                index->y = j;
                 cell_data->b_is_blocked = true;
-                arr_entity_push_back (array->content, ent);
                 break;
               }
             case '2':
               {
-                ecs_entity_t pfb = ecs_lookup (world, "rock_pfb");
-                ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-                string_t temp;
+                pfb = ecs_lookup (world, "rock_pfb");
                 string_init_printf (temp, "rock_%d_%d", i, j);
-                ecs_set_name (world, ent, string_get_cstr (temp));
-                index_c *index = ecs_get_mut (world, ent, index_c);
-                index->x = i;
-                index->y = j;
                 cell_data->b_is_blocked = true;
-                arr_entity_push_back (array->content, ent);
                 break;
               }
             default:
               {
                 break;
               }
+            }
+
+          if(pfb != 0u)
+            {
+              ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+              ecs_set_name (world, ent, string_get_cstr (temp));
+              index_c *index = ecs_get_mut (world, ent, index_c);
+              index->x = i;
+              index->y = j;
+
+              arr_entity_push_back (array->content, ent);
             }
 
           i++;

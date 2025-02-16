@@ -619,7 +619,7 @@ create_bombers (ecs_world_t *world)
     bomb_storage->count = bomb_storage->max_count;
 
     index_c *index = ecs_get_mut (world, ent, index_c);
-    index->x = 5;
+    index->x = 1;
     index->y = 1;
 
     ecs_add (world, ent, scroll_to_c);
@@ -640,8 +640,8 @@ create_bombers (ecs_world_t *world)
     bomb_storage->count = bomb_storage->max_count;
 
     index_c *index = ecs_get_mut (world, ent, index_c);
-    index->x = 9;
-    index->y = 8;
+    index->x = 1;
+    index->y = 13;
 
     ecs_add (world, ent, scroll_to_c);
 
@@ -782,7 +782,7 @@ create_map (ecs_world_t *world)
               }
             }
 
-          if(pfb != 0u)
+          if (pfb != 0u)
             {
               ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
               ecs_set_name (world, ent, string_get_cstr (temp));
@@ -999,23 +999,27 @@ main (int argc, char *argv[])
 {
   ecs_world_t *world = ecs_init ();
 
-  struct pluto_core_params params
-      = { .init_flags = SDL_INIT_VIDEO,
-          .default_win_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
-          .window_name = "Doomsday",
-          .window_flags = SDL_WINDOW_RESIZABLE,
-          .default_user_scaling = 1.f,
-          .renderer_blend_mode = SDL_BLENDMODE_BLEND,
-          .gpu_driver_hint = "vulkan",
-          .b_is_DPI_aware = false,
-          .b_should_debug_GPU = true,
-          .b_has_logical_size = true,
-          .logical_presentation_mode = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE,
-          .input_data = { .b_is_resizing_widget = false,
-                          .b_is_dragging_widget = false,
-                          .b_is_moving_camera = false } };
+  struct pluto_core_params params = {
+    .init_flags = SDL_INIT_VIDEO,
+    .default_win_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
+    .window_name = "Doomsday",
+    .window_flags = SDL_WINDOW_RESIZABLE,
+    .default_user_scaling = 1.f,
+    .renderer_blend_mode = SDL_BLENDMODE_BLEND,
+    .gpu_driver_hint = "vulkan",
+    .b_is_DPI_aware = false,
+    .b_should_debug_GPU = true,
+    .b_has_logical_size = true,
+    .logical_presentation_mode = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE,
+    .input_data = { .b_is_resizing_widget = false,
+                    .b_is_dragging_widget = false,
+                    .b_is_moving_camera = false },
+    .initial_constant_scroll_speed = 1.f,
+    .initial_scroll_style = PLUTO_SCROLL_STYLE_CONSTANT,
+    .b_should_initially_clamp_scroll_x = true,
+    .b_should_initially_ignore_scroll_y = true,
+  };
   core_s *core = init_pluto (world, &params);
-  core->b_ignore_scroll_y = true;
 
   ECS_TAG (world, instigator);
 

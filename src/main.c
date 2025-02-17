@@ -606,6 +606,19 @@ system_lifetime_progress (ecs_iter_t *it)
 }
 
 static void
+TEST_place_entities (ecs_world_t *world)
+{
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "char_cursed_balloon_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 8;
+    index->y = 8;
+  }
+}
+
+static void
 create_bombers (ecs_world_t *world)
 {
   const game_s *game = ecs_singleton_get (world, game_s);
@@ -820,7 +833,7 @@ init_game_character_prefabs (ecs_world_t *world)
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
     ecs_entity_t ent
-        = ecs_entity (world, { .name = "char_bad_balloon_pfb",
+        = ecs_entity (world, { .name = "char_cursed_balloon_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
 
     layer_c *layer = ecs_get_mut (world, ent, layer_c);
@@ -1068,6 +1081,7 @@ main (int argc, char *argv[])
   create_layers (world);
   create_map (world);
   create_bombers (world);
+  TEST_place_entities (world);
 
   SDL_Event e;
   while (1)

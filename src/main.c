@@ -1018,6 +1018,7 @@ main (int argc, char *argv[])
     .initial_scroll_style = PLUTO_SCROLL_STYLE_CONSTANT,
     .b_should_initially_clamp_scroll_x = true,
     .b_should_initially_ignore_scroll_y = true,
+    .initial_scroll_poll_frequency_ms = 100u
   };
   core_s *core = init_pluto (world, &params);
 

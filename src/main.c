@@ -802,6 +802,39 @@ create_map (ecs_world_t *world)
 }
 
 static void
+init_game_character_prefabs (ecs_world_t *world)
+{
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "grid_character_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+    //    anim_player_c *anim_player = ecs_ensure (ecs, ent, anim_player_c);
+
+    layer_c *layer = ecs_get_mut (world, ent, layer_c);
+    layer->value = 2;
+
+    movement_c *movement = ecs_ensure (world, ent, movement_c);
+    movement->default_cooldown = 10u;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "char_bad_balloon_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+
+    layer_c *layer = ecs_get_mut (world, ent, layer_c);
+    layer->value = 2;
+
+    movement_c *movement = ecs_ensure (world, ent, movement_c);
+    movement->default_cooldown = 10u;
+
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+    string_init_set_str (sprite->name, "T_Flipbook_CursedBalloon.png");
+  }
+}
+
+static void
 init_game_prefabs (ecs_world_t *world)
 {
   {
@@ -871,18 +904,6 @@ init_game_prefabs (ecs_world_t *world)
 
     origin_c *origin = ecs_get_mut (world, ent, origin_c);
     origin->b_is_screen_based = true;
-  }
-  {
-    ecs_entity_t pfb = ecs_lookup (world, "grid_object_pfb");
-    ecs_entity_t ent
-        = ecs_entity (world, { .name = "grid_character_pfb",
-                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
-    //    anim_player_c *anim_player = ecs_ensure (ecs, ent, anim_player_c);
-
-    layer_c *layer = ecs_get_mut (world, ent, layer_c);
-    layer->value = 2;
-    movement_c *movement = ecs_ensure (world, ent, movement_c);
-    movement->default_cooldown = 10u;
   }
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_object_static_pfb");
@@ -999,27 +1020,26 @@ main (int argc, char *argv[])
 {
   ecs_world_t *world = ecs_init ();
 
-  struct pluto_core_params params = {
-    .init_flags = SDL_INIT_VIDEO,
-    .default_win_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
-    .window_name = "Doomsday",
-    .window_flags = SDL_WINDOW_RESIZABLE,
-    .default_user_scaling = 1.f,
-    .renderer_blend_mode = SDL_BLENDMODE_BLEND,
-    .gpu_driver_hint = "vulkan",
-    .b_is_DPI_aware = false,
-    .b_should_debug_GPU = true,
-    .b_has_logical_size = true,
-    .logical_presentation_mode = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE,
-    .input_data = { .b_is_resizing_widget = false,
-                    .b_is_dragging_widget = false,
-                    .b_is_moving_camera = false },
-    .initial_constant_scroll_speed = 1.f,
-    .initial_scroll_style = PLUTO_SCROLL_STYLE_CONSTANT,
-    .b_should_initially_clamp_scroll_x = true,
-    .b_should_initially_ignore_scroll_y = true,
-    .initial_scroll_poll_frequency_ms = 100u
-  };
+  struct pluto_core_params params
+      = { .init_flags = SDL_INIT_VIDEO,
+          .default_win_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
+          .window_name = "Doomsday",
+          .window_flags = SDL_WINDOW_RESIZABLE,
+          .default_user_scaling = 1.f,
+          .renderer_blend_mode = SDL_BLENDMODE_BLEND,
+          .gpu_driver_hint = "vulkan",
+          .b_is_DPI_aware = false,
+          .b_should_debug_GPU = true,
+          .b_has_logical_size = true,
+          .logical_presentation_mode = SDL_LOGICAL_PRESENTATION_INTEGER_SCALE,
+          .input_data = { .b_is_resizing_widget = false,
+                          .b_is_dragging_widget = false,
+                          .b_is_moving_camera = false },
+          .initial_constant_scroll_speed = 1.f,
+          .initial_scroll_style = PLUTO_SCROLL_STYLE_CONSTANT,
+          .b_should_initially_clamp_scroll_x = true,
+          .b_should_initially_ignore_scroll_y = true,
+          .initial_scroll_poll_frequency_ms = 100u };
   core_s *core = init_pluto (world, &params);
 
   ECS_TAG (world, instigator);
@@ -1041,6 +1061,7 @@ main (int argc, char *argv[])
 
   init_game_hooks (world);
   init_game_prefabs (world);
+  init_game_character_prefabs (world);
   init_game_queries (world);
   init_game_systems (world);
   create_player_controllers (world);

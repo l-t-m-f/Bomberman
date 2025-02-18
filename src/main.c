@@ -187,11 +187,11 @@ TEST_try_play_all_brains (ecs_world_t *world)
             {
               AI_controller->control_delta.y = -1;
             }
-          else if (buf < UINT8_MAX / 3)
+          else if (buf < ((UINT8_MAX / 4)  * 2))
             {
               AI_controller->control_delta.x = -1;
             }
-          else if (buf < UINT8_MAX / 2)
+          else if (buf < ((UINT8_MAX / 4)  * 3))
             {
               AI_controller->control_delta.y = 1;
             }
@@ -682,6 +682,38 @@ TEST_place_entities (ecs_world_t *world)
     index->x = 8;
     index->y = 8;
   }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "char_cursed_balloon_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 18;
+    index->y = 11;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "char_cursed_balloon_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 6;
+    index->y = 12;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "char_cursed_balloon_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 24;
+    index->y = 13;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "char_cursed_balloon_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 13;
+    index->y = 3;
+  }
 }
 
 static void
@@ -718,27 +750,27 @@ create_bombers (ecs_world_t *world)
     controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
     controller->pawn = ent;
   }
-  {
-    ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
-    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-    ecs_set_name (world, ent, "bomber2");
-
-    bomb_storage_c *bomb_storage = ecs_ensure (world, ent, bomb_storage_c);
-    bomb_storage->max_count = 2;
-    bomb_storage->count = bomb_storage->max_count;
-
-    index_c *index = ecs_get_mut (world, ent, index_c);
-    index->x = 1;
-    index->y = 13;
-
-    ecs_add (world, ent, scroll_to_c);
-
-    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
-    string_set_str (sprite->name, "T_Flipbook_Bomber2.png");
-
-    controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
-    controller->pawn = ent;
-  }
+//  {
+//    ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
+//    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+//    ecs_set_name (world, ent, "bomber2");
+//
+//    bomb_storage_c *bomb_storage = ecs_ensure (world, ent, bomb_storage_c);
+//    bomb_storage->max_count = 2;
+//    bomb_storage->count = bomb_storage->max_count;
+//
+//    index_c *index = ecs_get_mut (world, ent, index_c);
+//    index->x = 1;
+//    index->y = 13;
+//
+//    ecs_add (world, ent, scroll_to_c);
+//
+//    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+//    string_set_str (sprite->name, "T_Flipbook_Bomber2.png");
+//
+//    controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+//    controller->pawn = ent;
+//  }
 }
 
 static void

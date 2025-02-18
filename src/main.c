@@ -1,12 +1,32 @@
+/** Doomsday - A Bomberman Game by Émile Fréchette
+ *  Created in February 2025. */
+
+/** How does it work? */
+/* This project uses Pluto framework, which is a simple framework I created
+ * that unifies flecs (v.4) and SDL (v.3) under a set of useful primitive
+ * components out of which to build various 2D games, tiled or not. Its like a
+ * game-agnostic collection of stuff which accelerates and standardizes my
+ * games. Additionally, I also have additional game modules which are included
+ * after Pluto, and also used by Pluto, for various generic task like sprite
+ * atlas creation, text management, inputs, etc. The difference between these
+ * modules and Pluto, is that only Pluto depends on flecs and coordinates with
+ * flecs. The modules are only dependant on SDL and are meant to be potentially
+ * usable without Pluto at all. The projects also use M*Lib containers and
+ * string type.
+ * */
+
 #include "SDL3/SDL.h"
 #include "randombytes.h"
 
+/* Pluto framework. */
 #include "pluto.h"
 
+/* Game modules dependencies. */
 #include "input_man.h"
 #include "log.h"
+Sint32 DEBUG_LOG
+    = DEBUG_LOG_NONE; /* Minimum log level for debug_log calls to print. */
 #include "render_target.h"
-#include "util.h"
 
 #define CELL_SIZE 32
 #define MAP_CELL_COUNT_W 30
@@ -16,8 +36,7 @@
 #define LOGIC_WIDTH (MAP_WIDTH / 2)
 #define LOGIC_HEIGHT (MAP_HEIGHT)
 
-Sint32 DEBUG_LOG = DEBUG_LOG_NONE;
-
+/* Game-specific components. */
 typedef struct singleton_game
 {
   ecs_entity_t P1;
@@ -66,6 +85,8 @@ ECS_COMPONENT_DECLARE (cell_data_c);
 ECS_COMPONENT_DECLARE (controller_c);
 ECS_COMPONENT_DECLARE (lifetime_c);
 
+/* Game-specific hooks */
+
 static void
 brain (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
 {
@@ -109,6 +130,32 @@ lifetime (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
     }
 }
 
+/* Game-specific systems. */
+
+static void
+system_lifetime_progress (ecs_iter_t *it)
+{
+  lifetime_c *lifetime = ecs_field (it, lifetime_c, 0);
+
+  for (Sint32 i = 0; i < it->count; i++)
+    {
+      if (lifetime[i].duration > 0)
+        {
+          lifetime[i].duration--;
+        }
+      else
+        {
+          if (lifetime[i].on_delete_callback != NULL)
+            {
+              lifetime[i].on_delete_callback (it->world, it->entities[i]);
+            }
+          ecs_delete (it->world, it->entities[i]);
+        }
+    }
+}
+
+/* */
+
 static bool
 can_character_move (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
 {
@@ -132,6 +179,12 @@ can_character_move (ecs_world_t *world, ecs_entity_t ent, SDL_Point dir)
   return true;
 }
 
+/**
+ *
+ * @param world
+ * @param ent Player controller or AI entity (expected to have a controller
+ * component).
+ */
 static void
 try_move_character (ecs_world_t *world, ecs_entity_t ent)
 {
@@ -187,11 +240,11 @@ TEST_try_play_all_brains (ecs_world_t *world)
             {
               AI_controller->control_delta.y = -1;
             }
-          else if (buf < ((UINT8_MAX / 4)  * 2))
+          else if (buf < ((UINT8_MAX / 4) * 2))
             {
               AI_controller->control_delta.x = -1;
             }
-          else if (buf < ((UINT8_MAX / 4)  * 3))
+          else if (buf < ((UINT8_MAX / 4) * 3))
             {
               AI_controller->control_delta.y = 1;
             }
@@ -650,29 +703,7 @@ get_relative_from_index (ecs_entity_t ent, ecs_world_t *world)
 }
 
 static void
-system_lifetime_progress (ecs_iter_t *it)
-{
-  lifetime_c *lifetime = ecs_field (it, lifetime_c, 0);
-
-  for (Sint32 i = 0; i < it->count; i++)
-    {
-      if (lifetime[i].duration > 0)
-        {
-          lifetime[i].duration--;
-        }
-      else
-        {
-          if (lifetime[i].on_delete_callback != NULL)
-            {
-              lifetime[i].on_delete_callback (it->world, it->entities[i]);
-            }
-          ecs_delete (it->world, it->entities[i]);
-        }
-    }
-}
-
-static void
-TEST_place_entities (ecs_world_t *world)
+TEST_spawn_entities (ecs_world_t *world)
 {
   {
     ecs_entity_t pfb = ecs_lookup (world, "char_cursed_balloon_pfb");
@@ -750,27 +781,27 @@ create_bombers (ecs_world_t *world)
     controller_c *controller = ecs_get_mut (world, game->P1, controller_c);
     controller->pawn = ent;
   }
-//  {
-//    ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
-//    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
-//    ecs_set_name (world, ent, "bomber2");
-//
-//    bomb_storage_c *bomb_storage = ecs_ensure (world, ent, bomb_storage_c);
-//    bomb_storage->max_count = 2;
-//    bomb_storage->count = bomb_storage->max_count;
-//
-//    index_c *index = ecs_get_mut (world, ent, index_c);
-//    index->x = 1;
-//    index->y = 13;
-//
-//    ecs_add (world, ent, scroll_to_c);
-//
-//    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
-//    string_set_str (sprite->name, "T_Flipbook_Bomber2.png");
-//
-//    controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
-//    controller->pawn = ent;
-//  }
+  //  {
+  //    ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
+  //    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+  //    ecs_set_name (world, ent, "bomber2");
+  //
+  //    bomb_storage_c *bomb_storage = ecs_ensure (world, ent, bomb_storage_c);
+  //    bomb_storage->max_count = 2;
+  //    bomb_storage->count = bomb_storage->max_count;
+  //
+  //    index_c *index = ecs_get_mut (world, ent, index_c);
+  //    index->x = 1;
+  //    index->y = 13;
+  //
+  //    ecs_add (world, ent, scroll_to_c);
+  //
+  //    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+  //    string_set_str (sprite->name, "T_Flipbook_Bomber2.png");
+  //
+  //    controller_c *controller = ecs_get_mut (world, game->P2, controller_c);
+  //    controller->pawn = ent;
+  //  }
 }
 
 static void
@@ -1202,7 +1233,7 @@ main (int argc, char *argv[])
   create_layers (world);
   create_map (world);
   create_bombers (world);
-  TEST_place_entities (world);
+  TEST_spawn_entities (world);
 
   SDL_Event e;
   while (1)

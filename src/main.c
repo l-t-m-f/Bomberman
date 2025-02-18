@@ -6,8 +6,8 @@
  * that unifies flecs (v.4) and SDL (v.3) under a set of useful primitive
  * components out of which to build various 2D games, tiled or not. Its like a
  * game-agnostic collection of stuff which accelerates and standardizes my
- * games. Additionally, I also have additional game modules which are included
- * after Pluto, and also used by Pluto, for various generic task like sprite
+ * games. Plus, I also have additional game modules which are included
+ * after Pluto, and also used by Pluto, for various generic tasks like sprite
  * atlas creation, text management, inputs, etc. The difference between these
  * modules and Pluto, is that only Pluto depends on flecs and coordinates with
  * flecs. The modules are only dependant on SDL and are meant to be potentially

@@ -738,12 +738,28 @@ TEST_spawn_entities (ecs_world_t *world)
     index->y = 13;
   }
   {
-    ecs_entity_t pfb = ecs_lookup (world, "char_cursed_balloon_pfb");
+    ecs_entity_t pfb = ecs_lookup (world, "char_cop_car_pfb");
     ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
 
     index_c *index = ecs_get_mut (world, ent, index_c);
     index->x = 13;
     index->y = 3;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "char_ghost_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 18;
+    index->y = 7;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "char_ghost_pfb");
+    ecs_entity_t ent = ecs_new_w_pair (world, EcsIsA, pfb);
+
+    index_c *index = ecs_get_mut (world, ent, index_c);
+    index->x = 17;
+    index->y = 6;
   }
 }
 
@@ -971,19 +987,52 @@ init_game_character_prefabs (ecs_world_t *world)
   {
     ecs_entity_t pfb = ecs_lookup (world, "grid_character_pfb");
     ecs_entity_t ent
-        = ecs_entity (world, { .name = "char_cursed_balloon_pfb",
+        = ecs_entity (world, { .name = "grid_AI_character_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
 
     ecs_add (world, ent, brain_c);
-
-    layer_c *layer = ecs_get_mut (world, ent, layer_c);
-    layer->value = 2;
-
-    movement_c *movement = ecs_ensure (world, ent, movement_c);
-    movement->default_cooldown = 10u;
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_AI_character_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "char_cursed_balloon_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
 
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
     string_init_set_str (sprite->name, "T_Flipbook_CursedBalloon.png");
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_AI_character_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "char_ghost_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
+    string_init_set_str (sprite->name, "T_Flipbook_Ghost.png");
+  }
+  {
+    ecs_entity_t pfb = ecs_lookup (world, "grid_AI_character_pfb");
+    ecs_entity_t ent
+        = ecs_entity (world, { .name = "char_cop_car_pfb",
+                               .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
+
+    anim_player_c *anim_player = ecs_ensure (world, ent, anim_player_c);
+    struct anim_flipbook *flipbook
+        = SDL_malloc (sizeof (struct anim_flipbook));
+    flipbook->frame_count = (SDL_Point){ 6, 1 };
+    flipbook->frame_size = (SDL_FPoint){ 32.f, 32.f };
+    string_init_set_str (flipbook->name, "T_Flipbook_CopCar.png");
+    flipbook->play_speed = 24u;
+    struct anim_pose *pose = SDL_malloc (sizeof (struct anim_pose));
+    dict_sint32_anim_flipbook_init (pose->directions);
+    dict_sint32_anim_flipbook_set_at (pose->directions, 0, flipbook);
+    dict_string_anim_pose_init (anim_player->poses);
+    dict_string_anim_pose_set_at (anim_player->poses, STRING_CTE ("default"),
+                                  pose);
+    string_init_set_str (anim_player->control_pose, "default");
+    anim_player->control_direction = 0;
+
+    sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
   }
 }
 

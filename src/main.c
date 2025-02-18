@@ -22,6 +22,7 @@ typedef struct singleton_game
 {
   ecs_entity_t P1;
   ecs_entity_t P2;
+  ecs_entity_t AI;
   ecs_entity_t camera;
   mat2d_entity_t cells;
   ecs_entity_t current_scene;
@@ -33,6 +34,11 @@ typedef struct component_bomb_storage
   Sint8 max_count;
   Sint8 count;
 } bomb_storage_c;
+
+typedef struct component_brain
+{
+  bool b_is_active;
+} brain_c;
 
 typedef struct component_cell_data
 {
@@ -55,9 +61,20 @@ typedef struct component_controller
 ECS_COMPONENT_DECLARE (game_s);
 
 ECS_COMPONENT_DECLARE (bomb_storage_c);
+ECS_COMPONENT_DECLARE (brain_c);
 ECS_COMPONENT_DECLARE (cell_data_c);
 ECS_COMPONENT_DECLARE (controller_c);
 ECS_COMPONENT_DECLARE (lifetime_c);
+
+static void
+brain (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
+{
+  brain_c *brain = ptr;
+  for (Sint32 i = 0; i < count; i++)
+    {
+      brain[i].b_is_active = true;
+    }
+}
 
 static void
 cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
@@ -135,6 +152,55 @@ try_move_character (ecs_world_t *world, ecs_entity_t ent)
 
       movement->cooldown = movement->default_cooldown;
       ecs_modified (world, controller->pawn, movement_c);
+    }
+}
+
+static void
+TEST_try_play_all_brains (ecs_world_t *world)
+{
+  static Uint32 cooldown;
+  if (cooldown < 2u)
+    {
+      cooldown++;
+      return;
+    }
+  cooldown = 0u;
+  const game_s *game = ecs_singleton_get (world, game_s);
+  ecs_iter_t it = ecs_query_iter (
+      world, *dict_string_to_query_ptr_get (game->queries,
+                                            STRING_CTE ("get_all_brains")));
+  while (ecs_query_next (&it))
+    {
+      brain_c *brain = ecs_field (&it, brain_c, 0);
+      movement_c *movement = ecs_field (&it, movement_c, 1);
+
+      controller_c *AI_controller
+          = ecs_get_mut (it.world, game->AI, controller_c);
+
+      for (Sint32 i = 0; i < it.count; i++)
+        {
+          AI_controller->pawn = it.entities[i];
+          AI_controller->control_delta = (SDL_Point){ 0, 0 };
+          Uint8 buf;
+          randombytes (&buf, sizeof (Uint8));
+          if (buf < UINT8_MAX / 4)
+            {
+              AI_controller->control_delta.y = -1;
+            }
+          else if (buf < UINT8_MAX / 3)
+            {
+              AI_controller->control_delta.x = -1;
+            }
+          else if (buf < UINT8_MAX / 2)
+            {
+              AI_controller->control_delta.y = 1;
+            }
+          else
+            {
+              AI_controller->control_delta.x = 1;
+            }
+          try_move_character (world, game->AI);
+        }
     }
 }
 
@@ -619,6 +685,15 @@ TEST_place_entities (ecs_world_t *world)
 }
 
 static void
+TEST_create_game_master (ecs_world_t *world)
+{
+  game_s *game = ecs_get_mut (world, ecs_id (game_s), game_s);
+  ecs_entity_t ent = ecs_entity (world, { .name = "game_master" });
+  ecs_add (world, ent, controller_c);
+  game->AI = ent;
+}
+
+static void
 create_bombers (ecs_world_t *world)
 {
   const game_s *game = ecs_singleton_get (world, game_s);
@@ -836,6 +911,8 @@ init_game_character_prefabs (ecs_world_t *world)
         = ecs_entity (world, { .name = "char_cursed_balloon_pfb",
                                .add = ecs_ids (EcsPrefab, ecs_isa (pfb)) });
 
+    ecs_add (world, ent, brain_c);
+
     layer_c *layer = ecs_get_mut (world, ent, layer_c);
     layer->value = 2;
 
@@ -1007,6 +1084,13 @@ init_game_queries (ecs_world_t *world)
     dict_string_to_query_ptr_set_at (game->queries,
                                      STRING_CTE ("get_all_rocks"), q);
   }
+  {
+    ecs_query_t *q
+        = ecs_query (world, { .terms = { { .id = ecs_id (brain_c) },
+                                         { .id = ecs_id (movement_c) } } });
+    dict_string_to_query_ptr_set_at (game->queries,
+                                     STRING_CTE ("get_all_brains"), q);
+  }
 }
 
 static void
@@ -1018,6 +1102,9 @@ init_game_systems (ecs_world_t *world)
 static void
 init_game_hooks (ecs_world_t *world)
 {
+  ecs_type_hooks_t brain_hooks = { .ctor = brain };
+  ecs_set_hooks_id (world, ecs_id (brain_c), &brain_hooks);
+
   ecs_type_hooks_t cell_data_hooks = { .ctor = cell_data };
   ecs_set_hooks_id (world, ecs_id (cell_data_c), &cell_data_hooks);
 
@@ -1062,6 +1149,7 @@ main (int argc, char *argv[])
   mat2d_entity_init (game->cells);
 
   ECS_COMPONENT_DEFINE (world, bomb_storage_c);
+  ECS_COMPONENT_DEFINE (world, brain_c);
   ECS_COMPONENT_DEFINE (world, cell_data_c);
   ECS_COMPONENT_DEFINE (world, controller_c);
   ECS_COMPONENT_DEFINE (world, lifetime_c);
@@ -1077,6 +1165,7 @@ main (int argc, char *argv[])
   init_game_character_prefabs (world);
   init_game_queries (world);
   init_game_systems (world);
+  TEST_create_game_master (world);
   create_player_controllers (world);
   create_layers (world);
   create_map (world);
@@ -1133,6 +1222,7 @@ main (int argc, char *argv[])
       input_man_bounce_keys (core->input_man, world);
       try_move_character (world, game->P1);
       try_move_character (world, game->P2);
+      TEST_try_play_all_brains (world);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 0, 255);
       SDL_RenderClear (core->rend);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 188, 255);

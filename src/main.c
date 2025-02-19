@@ -1234,7 +1234,9 @@ main (int argc, char *argv[])
 
   struct pluto_core_params params
       = { .init_flags = SDL_INIT_VIDEO,
-          .default_win_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
+          .initial_window_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
+          .initial_logical_size = { .x = LOGIC_WIDTH, .y = LOGIC_HEIGHT },
+          .initial_layout_size = { .x = MAP_WIDTH, .y = MAP_HEIGHT },
           .window_name = "Doomsday",
           .window_flags = SDL_WINDOW_RESIZABLE,
           .default_user_scaling = 1.f,

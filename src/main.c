@@ -63,6 +63,7 @@ typedef struct component_cell_data
 {
   bool b_is_blocked;
   bool b_has_bomb;
+  bool b_has_explosion;
 } cell_data_c;
 
 typedef struct component_lifetime
@@ -105,6 +106,7 @@ cell_data (void *ptr, Sint32 count, const ecs_type_info_t *type_info)
     {
       cell_data[i].b_is_blocked = false;
       cell_data[i].b_has_bomb = false;
+      cell_data[i].b_has_explosion = false;
     }
 }
 
@@ -257,6 +259,40 @@ TEST_try_play_all_brains (ecs_world_t *world)
     }
 }
 
+void
+check_characters_damage (ecs_world_t *world)
+{
+  const game_s *game = ecs_singleton_get (world, game_s);
+  ecs_iter_t it = ecs_query_iter (
+      world, *dict_string_to_query_ptr_get (
+                 game->queries, STRING_CTE ("get_all_characters")));
+  while (ecs_query_next (&it))
+    {
+      index_c *index = ecs_field (&it, index_c, 1);
+      for (Sint32 i = 0; i < it.count; i++)
+        {
+          ecs_entity_t cell = *arr_entity_get (
+              *mat2d_entity_get (game->cells, index[i].y), index[i].x);
+          cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
+          if (cell_data->b_has_explosion == true)
+            {
+              ecs_delete (world, it.entities[i]);
+            }
+        }
+    }
+}
+
+void
+dispell_explosion (ecs_world_t *world, ecs_entity_t ent)
+{
+  const game_s *game = ecs_singleton_get (world, game_s);
+  index_c *index = ecs_get_mut (world, ent, index_c);
+  ecs_entity_t cell
+      = *arr_entity_get (*mat2d_entity_get (game->cells, index->y), index->x);
+  cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
+  cell_data->b_has_explosion = false;
+}
+
 static void
 spawn_explosion (ecs_world_t *world, ecs_entity_t ent, Sint32 dx, Sint32 dy,
                  Sint32 range)
@@ -283,7 +319,7 @@ spawn_explosion (ecs_world_t *world, ecs_entity_t ent, Sint32 dx, Sint32 dy,
           *mat2d_entity_get (game->cells, potential_spawn.y),
           potential_spawn.x);
 
-      const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
+      cell_data_c *cell_data = ecs_get_mut (world, cell, cell_data_c);
       if (cell_data->b_is_blocked)
         {
           return;
@@ -295,6 +331,8 @@ spawn_explosion (ecs_world_t *world, ecs_entity_t ent, Sint32 dx, Sint32 dy,
       index->y = potential_spawn.y;
       ecs_modified (world, new, index_c);
       ecs_add_pair (world, new, instigator_rel, instigator);
+
+      cell_data->b_has_explosion = true;
     }
 }
 
@@ -1052,6 +1090,7 @@ init_game_prefabs (ecs_world_t *world)
     anim_player->control_direction = 0;
     lifetime_c *lifetime = ecs_ensure (world, ent, lifetime_c);
     lifetime->duration = 150u;
+    lifetime->on_delete_callback = dispell_explosion;
     sprite_c *sprite = ecs_get_mut (world, ent, sprite_c);
   }
 }
@@ -1066,6 +1105,15 @@ init_game_queries (ecs_world_t *world)
         world, { .terms = { { ecs_isa (ecs_lookup (world, "rock_pfb")) } } });
     dict_string_to_query_ptr_set_at (game->queries,
                                      STRING_CTE ("get_all_rocks"), q);
+  }
+  {
+    ecs_query_t *q = ecs_query (
+        world,
+        { .terms
+          = { { .id = ecs_isa (ecs_lookup (world, "grid_character_pfb")) },
+              { .id = ecs_id (index_c) } } });
+    dict_string_to_query_ptr_set_at (game->queries,
+                                     STRING_CTE ("get_all_characters"), q);
   }
   {
     ecs_query_t *q
@@ -1208,6 +1256,7 @@ main (int argc, char *argv[])
       try_move_character (world, game->P1);
       try_move_character (world, game->P2);
       TEST_try_play_all_brains (world);
+      check_characters_damage (world);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 0, 255);
       SDL_RenderClear (core->rend);
       SDL_SetRenderDrawColor (core->rend, 0, 0, 188, 255);

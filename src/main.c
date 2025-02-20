@@ -258,7 +258,8 @@ TEST_try_play_all_brains (ecs_world_t *world)
 }
 
 static void
-create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
+spawn_explosion (ecs_world_t *world, ecs_entity_t ent, Sint32 dx, Sint32 dy,
+                 Sint32 range)
 {
   ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
   ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
@@ -267,168 +268,27 @@ create_explosion_top_col (ecs_world_t *world, ecs_entity_t ent)
   const game_s *game = ecs_singleton_get (world, game_s);
   const index_c *index_b = ecs_get (world, ent, index_c);
 
-  for (Sint32 i = 1; i < 3; i++)
+  for (Sint32 i = 0; i < range; i++)
     {
       SDL_Point potential_spawn
-          = (SDL_Point){ .x = index_b->x, .y = index_b->y - i };
-      if (potential_spawn.y < 0 || potential_spawn.y >= MAP_CELL_COUNT_H)
+          = (SDL_Point){ .x = index_b->x + dx * i, .y = index_b->y + dy * i };
+
+      if (potential_spawn.x < 0 || potential_spawn.x >= MAP_CELL_COUNT_W
+          || potential_spawn.y < 0 || potential_spawn.y >= MAP_CELL_COUNT_H)
         {
           break;
         }
+
       ecs_entity_t cell = *arr_entity_get (
           *mat2d_entity_get (game->cells, potential_spawn.y),
           potential_spawn.x);
 
       const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
-      if (cell_data->b_is_blocked == false)
-        {
-          ecs_entity_t new = ecs_new_w_pair (world, EcsIsA, pfb);
-          index_c *index = ecs_ensure (world, new, index_c);
-          index->x = potential_spawn.x;
-          index->y = potential_spawn.y;
-          ecs_modified (world, new, index_c);
-          ecs_add_pair (world, new, instigator_rel, instigator);
-        }
-      else
+      if (cell_data->b_is_blocked)
         {
           return;
         }
-    }
-}
 
-static void
-create_explosion_left_row (ecs_world_t *world, ecs_entity_t ent)
-{
-  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
-  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
-
-  ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
-  const game_s *game = ecs_singleton_get (world, game_s);
-  const index_c *index_b = ecs_get (world, ent, index_c);
-
-  for (Sint32 i = 1; i < 3; i++)
-    {
-      SDL_Point potential_spawn
-          = (SDL_Point){ .x = index_b->x - i, .y = index_b->y };
-      if (potential_spawn.x < 0 || potential_spawn.x >= MAP_CELL_COUNT_W)
-        {
-          break;
-        }
-      ecs_entity_t cell = *arr_entity_get (
-          *mat2d_entity_get (game->cells, potential_spawn.y),
-          potential_spawn.x);
-
-      const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
-      if (cell_data->b_is_blocked == false)
-        {
-          ecs_entity_t new = ecs_new_w_pair (world, EcsIsA, pfb);
-          index_c *index = ecs_ensure (world, new, index_c);
-          index->x = potential_spawn.x;
-          index->y = potential_spawn.y;
-          ecs_modified (world, new, index_c);
-          ecs_add_pair (world, new, instigator_rel, instigator);
-        }
-      else
-        {
-          return;
-        }
-    }
-}
-
-static void
-create_explosion_bot_col (ecs_world_t *world, ecs_entity_t ent)
-{
-  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
-  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
-
-  ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
-  const game_s *game = ecs_singleton_get (world, game_s);
-  const index_c *index_b = ecs_get (world, ent, index_c);
-
-  for (Sint32 i = 1; i < 3; i++)
-    {
-      SDL_Point potential_spawn
-          = (SDL_Point){ .x = index_b->x, .y = index_b->y + i };
-      if (potential_spawn.y < 0 || potential_spawn.y >= MAP_CELL_COUNT_H)
-        {
-          break;
-        }
-      ecs_entity_t cell = *arr_entity_get (
-          *mat2d_entity_get (game->cells, potential_spawn.y),
-          potential_spawn.x);
-
-      const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
-      if (cell_data->b_is_blocked == false)
-        {
-          ecs_entity_t new = ecs_new_w_pair (world, EcsIsA, pfb);
-          index_c *index = ecs_ensure (world, new, index_c);
-          index->x = potential_spawn.x;
-          index->y = potential_spawn.y;
-          ecs_modified (world, new, index_c);
-          ecs_add_pair (world, new, instigator_rel, instigator);
-        }
-      else
-        {
-          return;
-        }
-    }
-}
-
-static void
-create_explosion_right_row (ecs_world_t *world, ecs_entity_t ent)
-{
-  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
-  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
-
-  ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
-  const game_s *game = ecs_singleton_get (world, game_s);
-  const index_c *index_b = ecs_get (world, ent, index_c);
-
-  for (Sint32 i = 1; i < 3; i++)
-    {
-      SDL_Point potential_spawn
-          = (SDL_Point){ .x = index_b->x + i, .y = index_b->y };
-      if (potential_spawn.x < 0 || potential_spawn.x >= MAP_CELL_COUNT_W)
-        {
-          break;
-        }
-      ecs_entity_t cell = *arr_entity_get (
-          *mat2d_entity_get (game->cells, potential_spawn.y),
-          potential_spawn.x);
-
-      const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
-      if (cell_data->b_is_blocked == false)
-        {
-          ecs_entity_t new = ecs_new_w_pair (world, EcsIsA, pfb);
-          index_c *index = ecs_ensure (world, new, index_c);
-          index->x = potential_spawn.x;
-          index->y = potential_spawn.y;
-          ecs_modified (world, new, index_c);
-          ecs_add_pair (world, new, instigator_rel, instigator);
-        }
-      else
-        {
-          return;
-        }
-    }
-}
-
-static void
-create_explosion_center (ecs_world_t *world, ecs_entity_t ent)
-{
-  ecs_id_t instigator_rel = ecs_lookup (world, "instigator");
-  ecs_entity_t instigator = ecs_get_target (world, ent, instigator_rel, 0);
-
-  ecs_entity_t pfb = ecs_lookup (world, "explosion_pfb");
-  const game_s *game = ecs_singleton_get (world, game_s);
-  const index_c *index_b = ecs_get (world, ent, index_c);
-  SDL_Point potential_spawn = (SDL_Point){ .x = index_b->x, .y = index_b->y };
-  ecs_entity_t cell = *arr_entity_get (
-      *mat2d_entity_get (game->cells, potential_spawn.y), potential_spawn.x);
-
-  const cell_data_c *cell_data = ecs_get (world, cell, cell_data_c);
-  if (cell_data->b_is_blocked == false)
-    {
       ecs_entity_t new = ecs_new_w_pair (world, EcsIsA, pfb);
       index_c *index = ecs_ensure (world, new, index_c);
       index->x = potential_spawn.x;
@@ -437,6 +297,17 @@ create_explosion_center (ecs_world_t *world, ecs_entity_t ent)
       ecs_add_pair (world, new, instigator_rel, instigator);
     }
 }
+
+#define create_explosion_top_col(world, ent)                                  \
+  spawn_explosion (world, ent, 0, -1, 3)
+#define create_explosion_left_row(world, ent)                                 \
+  spawn_explosion (world, ent, -1, 0, 3)
+#define create_explosion_bot_col(world, ent)                                  \
+  spawn_explosion (world, ent, 0, 1, 3)
+#define create_explosion_right_row(world, ent)                                \
+  spawn_explosion (world, ent, 1, 0, 3)
+#define create_explosion_center(world, ent)                                   \
+  spawn_explosion (world, ent, 0, 0, 1)
 
 static void
 create_explosion (ecs_world_t *world, ecs_entity_t ent)
